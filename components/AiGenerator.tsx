@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Wand2, Loader2, Save, RefreshCw, Sparkles, TextCursorInput, Film, Image as ImageIcon } from 'lucide-react';
+import { Wand2, Loader2, Save, RefreshCw, Sparkles, TextCursorInput, Film, Image as ImageIcon, Download } from 'lucide-react';
 import { generateWallpaper, generateMediaMetadata, generateVideoWallpaper } from '../services/geminiService';
 import { MediaType, MediaItem, AiMetadataResponse } from '../types';
 
@@ -98,6 +98,22 @@ const AiGenerator: React.FC<AiGeneratorProps> = ({ onSave }) => {
         setMetadata(null);
         setPrompt('');
     }, 600);
+  };
+
+  const handleDownloadMedia = () => {
+    if (!generatedMediaUrl) return;
+    
+    const link = document.createElement('a');
+    link.href = generatedMediaUrl;
+    
+    const timestamp = new Date().getTime();
+    const extension = activeTab === 'image' ? 'png' : 'mp4';
+    const filename = `purrfect-ai-${timestamp}.${extension}`;
+    
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   return (
@@ -228,13 +244,23 @@ const AiGenerator: React.FC<AiGeneratorProps> = ({ onSave }) => {
                     )}
                     
                     {/* Action Bar */}
-                    <div className="absolute bottom-8 flex gap-4 z-10">
+                    <div className="absolute bottom-8 flex gap-3 z-10">
                         <button 
                             onClick={handleGenerate}
-                            className="px-6 py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-medium shadow-lg backdrop-blur-md border border-slate-600 flex items-center gap-2 transition-all"
+                            className="px-4 py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-medium shadow-lg backdrop-blur-md border border-slate-600 flex items-center gap-2 transition-all"
+                            title="Yeniden Oluştur"
                         >
-                            <RefreshCw className="w-4 h-4" /> Yeniden
+                            <RefreshCw className="w-4 h-4" />
                         </button>
+                        
+                        <button 
+                            onClick={handleDownloadMedia}
+                            className="px-4 py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-medium shadow-lg backdrop-blur-md border border-slate-600 flex items-center gap-2 transition-all"
+                            title="Cihaza İndir"
+                        >
+                            <Download className="w-4 h-4" /> İndir
+                        </button>
+
                         <button 
                             onClick={handleSaveToGallery}
                             disabled={saving || !metadata}
