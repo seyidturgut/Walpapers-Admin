@@ -49,8 +49,11 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView }) => {
       </nav>
 
       <div className="p-4 border-t border-slate-700">
-        <button className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-400 hover:bg-slate-700/50 hover:text-slate-100 transition-colors">
-          <Settings className="w-5 h-5" />
+        <button 
+          onClick={() => onChangeView('settings')}
+          className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${currentView === 'settings' ? 'bg-purple-600 text-white' : 'text-slate-400 hover:bg-slate-700/50 hover:text-slate-100'}`}
+        >
+          <Settings className={`w-5 h-5 ${currentView === 'settings' ? 'text-white' : ''}`} />
           <span className="font-medium">Settings</span>
         </button>
       </div>

@@ -24,5 +24,5 @@ export interface AiMetadataResponse {
 
 export interface AppState {
   items: MediaItem[];
-  view: 'dashboard' | 'upload' | 'api-preview' | 'ai-generator';
+  view: 'dashboard' | 'upload' | 'api-preview' | 'ai-generator' | 'settings';
 }

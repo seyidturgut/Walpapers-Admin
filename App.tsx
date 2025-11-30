@@ -5,8 +5,10 @@ import UploadModal from './components/UploadModal';
 import ApiPreview from './components/ApiPreview';
 import LoginScreen from './components/LoginScreen';
 import AiGenerator from './components/AiGenerator';
+import SettingsView from './components/SettingsView';
 import { AppState, MediaItem, MediaType } from './types';
 import { Key, ExternalLink, ArrowRight, Loader2 } from 'lucide-react';
+import { getApiKey } from './services/geminiService';
 
 // Mock data to start with if empty
 const INITIAL_DATA: MediaItem[] = [
@@ -62,18 +64,27 @@ const App: React.FC = () => {
   const checkApiKey = async () => {
     setCheckingKey(true);
     try {
-      // Cast window to any to avoid type conflict with global AIStudio definition
+      // 1. Check Manual Key (LocalStorage) or Env
+      const manualKey = getApiKey();
+      if (manualKey) {
+        setHasApiKey(true);
+        setCheckingKey(false);
+        return;
+      }
+
+      // 2. Check AI Studio Embedded Key (if available)
       const win = window as any;
       if (win.aistudio && win.aistudio.hasSelectedApiKey) {
         const hasKey = await win.aistudio.hasSelectedApiKey();
         setHasApiKey(hasKey);
       } else {
-        // Fallback for dev environments without the wrapper
-        setHasApiKey(true);
+        // Fallback: If not in AI Studio and no local key, we assume false 
+        // unless we want to allow access to view items but not generate
+        // For now, let's force a key for the "Admin" experience.
+        setHasApiKey(false);
       }
     } catch (e) {
       console.error("Error checking API key", e);
-      // Fail safe
       setHasApiKey(false);
     } finally {
       setCheckingKey(false);
@@ -86,12 +97,25 @@ const App: React.FC = () => {
       const win = window as any;
       if (win.aistudio && win.aistudio.openSelectKey) {
         await win.aistudio.openSelectKey();
-        // Assume success to handle race condition where hasSelectedApiKey might lag
         setHasApiKey(true);
+      } else {
+        // If not in AI Studio environment, we can't open selector.
+        // But we can redirect user to Settings if they somehow bypass.
+        // For the blocking screen, we'll just show the manual input there too.
+        alert("AI Studio ortamında değilsiniz. Lütfen manuel anahtar girişini kullanın.");
       }
     } catch (e) {
       console.error("Error selecting key", e);
-      alert("API anahtarı seçimi sırasında bir hata oluştu.");
+    }
+  };
+
+  const handleManualKeyInput = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    const key = formData.get('manualApiKey') as string;
+    if (key.trim()) {
+        localStorage.setItem('gemini_api_key', key.trim());
+        setHasApiKey(true);
     }
   };
 
@@ -162,6 +186,8 @@ const App: React.FC = () => {
         return <AiGenerator onSave={handleSaveItem} />;
       case 'api-preview':
         return <ApiPreview items={items} />;
+      case 'settings':
+        return <SettingsView />;
       default:
         return <div>Not Found</div>;
     }
@@ -171,7 +197,7 @@ const App: React.FC = () => {
     return <LoginScreen onLogin={handleLogin} />;
   }
 
-  // Blocking screen if API Key is not selected
+  // Blocking screen if API Key is not selected AND we are not in Settings (to allow user to fix it)
   if (checkingKey) {
      return (
         <div className="min-h-screen bg-slate-900 flex items-center justify-center text-white">
@@ -189,23 +215,44 @@ const App: React.FC = () => {
           </div>
           <h2 className="text-2xl font-bold text-white mb-2">Google Cloud Bağlantısı</h2>
           <p className="text-slate-400 mb-6 text-sm leading-relaxed">
-            Kullandığınız AI modelleri (Gemini 3 Pro & Veo), ücretli bir Google Cloud projesi gerektirmektedir. Lütfen devam etmek için API anahtarınızı seçin.
+            Gemini 3 Pro ve Veo modellerini kullanmak için API anahtarına ihtiyacınız var.
           </p>
           
+          {/* Option A: Manual Input */}
+          <form onSubmit={handleManualKeyInput} className="mb-6">
+              <div className="relative">
+                  <input 
+                    name="manualApiKey"
+                    type="password"
+                    placeholder="Manuel API Anahtarı Giriniz (AIza...)"
+                    className="w-full bg-slate-900 border border-slate-600 rounded-xl px-4 py-3 text-white text-sm focus:border-purple-500 focus:outline-none mb-2"
+                  />
+                  <button type="submit" className="absolute right-2 top-2 p-1 bg-slate-700 rounded text-xs hover:bg-slate-600">
+                     Kaydet
+                  </button>
+              </div>
+          </form>
+
+          <div className="flex items-center gap-4 my-4">
+             <div className="h-px bg-slate-700 flex-1"></div>
+             <span className="text-slate-500 text-xs">VEYA</span>
+             <div className="h-px bg-slate-700 flex-1"></div>
+          </div>
+
           <button 
             onClick={handleSelectKey}
-            className="w-full py-3.5 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-white rounded-xl font-bold shadow-lg shadow-orange-900/30 flex items-center justify-center gap-2 transition-all mb-4"
+            className="w-full py-3 bg-slate-700 hover:bg-slate-600 text-white rounded-xl font-medium flex items-center justify-center gap-2 transition-all mb-4"
           >
-            API Anahtarı Seç <ArrowRight className="w-4 h-4" />
+            Google Hesabından Seç (Varsa)
           </button>
 
           <a 
-            href="https://ai.google.dev/gemini-api/docs/billing" 
+            href="https://aistudio.google.com/app/apikey" 
             target="_blank" 
             rel="noopener noreferrer"
-            className="text-xs text-slate-500 hover:text-slate-300 flex items-center justify-center gap-1 transition-colors"
+            className="text-xs text-blue-400 hover:text-blue-300 flex items-center justify-center gap-1 transition-colors"
           >
-            Faturalandırma hakkında bilgi al <ExternalLink className="w-3 h-3" />
+            Yeni API Anahtarı Oluştur <ExternalLink className="w-3 h-3" />
           </a>
         </div>
       </div>
@@ -239,12 +286,14 @@ const App: React.FC = () => {
                 {view === 'upload' && (editingItem ? 'Edit Content' : 'Upload New Media')}
                 {view === 'ai-generator' && 'AI Studio (Gen 3 & Veo)'}
                 {view === 'api-preview' && 'API Integration'}
+                {view === 'settings' && 'System Settings'}
              </h1>
              <p className="text-slate-400">
                 {view === 'dashboard' && 'Manage your cat wallpapers and videos.'}
                 {view === 'upload' && 'Add or update assets for your Android application.'}
                 {view === 'ai-generator' && 'Generate high-quality 9:16 wallpapers or videos.'}
                 {view === 'api-preview' && 'Preview the JSON data structure for your app.'}
+                {view === 'settings' && 'Configure API keys and system preferences.'}
              </p>
           </div>
 

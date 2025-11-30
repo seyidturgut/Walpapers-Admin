@@ -1,10 +1,22 @@
 import { GoogleGenAI, Type, Schema } from "@google/genai";
 import { AiMetadataResponse } from "../types";
 
+/**
+ * Retrieves the API Key from environment variables or local storage.
+ */
+export const getApiKey = (): string => {
+  // 1. Check process.env (Build time / Server side)
+  if (process.env.API_KEY) return process.env.API_KEY;
+  
+  // 2. Check localStorage (Client side manual entry)
+  const storedKey = localStorage.getItem('gemini_api_key');
+  return storedKey || '';
+};
+
 const getAiClient = () => {
-  const apiKey = process.env.API_KEY;
+  const apiKey = getApiKey();
   if (!apiKey) {
-    throw new Error("API Key is missing. Please ensure process.env.API_KEY is available.");
+    throw new Error("API Key is missing. Please add it in Settings.");
   }
   return new GoogleGenAI({ apiKey });
 };
@@ -153,7 +165,7 @@ export const generateWallpaper = async (prompt: string): Promise<string> => {
  */
 export const generateVideoWallpaper = async (prompt: string): Promise<string> => {
   const ai = getAiClient();
-  const apiKey = process.env.API_KEY;
+  const apiKey = getApiKey();
 
   // Enhance prompt specifically for short video loops
   const enhancedPrompt = `A short, looping cinematic vertical video of: ${prompt}. High quality, slow motion, photorealistic, suitable for phone live wallpaper.`;
