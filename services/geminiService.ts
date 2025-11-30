@@ -77,6 +77,33 @@ export const generateMediaMetadata = async (
 };
 
 /**
+ * Generates a creative prompt for image or video generation.
+ */
+export const generateCreativePrompt = async (type: 'image' | 'video'): Promise<string> => {
+  const ai = getAiClient();
+  
+  const systemInstruction = type === 'image' 
+    ? "You are an expert prompt engineer for AI Image Generators (like Midjourney or Gemini). Create a single, highly detailed, artistic, and visually stunning prompt for a mobile wallpaper featuring a cat. Focus on lighting, texture, color palette, and mood. Keep it under 60 words. Output ONLY the prompt text."
+    : "You are an expert prompt engineer for AI Video Generators (like Veo or Sora). Create a single, descriptive prompt for a short, looping vertical video featuring a cat. Focus on movement, physical actions, lighting, and cinematic atmosphere. Keep it under 60 words. Output ONLY the prompt text.";
+
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: "Generate a random, creative prompt now.",
+      config: {
+        systemInstruction: systemInstruction,
+        temperature: 1.2, // High creativity
+      },
+    });
+
+    return response.text || "";
+  } catch (error) {
+    console.error("Error generating creative prompt:", error);
+    throw error;
+  }
+};
+
+/**
  * Generates a wallpaper image using Gemini 3 Pro Image (Banana Pro).
  * Enforces 9:16 aspect ratio for mobile devices.
  */

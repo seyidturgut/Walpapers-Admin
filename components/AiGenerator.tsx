@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Wand2, Loader2, Save, RefreshCw, Sparkles, TextCursorInput, Film, Image as ImageIcon, Download } from 'lucide-react';
-import { generateWallpaper, generateMediaMetadata, generateVideoWallpaper } from '../services/geminiService';
+import { Wand2, Loader2, Save, RefreshCw, Sparkles, TextCursorInput, Film, Image as ImageIcon, Download, Zap } from 'lucide-react';
+import { generateWallpaper, generateMediaMetadata, generateVideoWallpaper, generateCreativePrompt } from '../services/geminiService';
 import { MediaType, MediaItem, AiMetadataResponse } from '../types';
 
 interface AiGeneratorProps {
@@ -32,10 +32,23 @@ const AiGenerator: React.FC<AiGeneratorProps> = ({ onSave }) => {
   const [metadata, setMetadata] = useState<AiMetadataResponse | null>(null);
   
   const [loading, setLoading] = useState(false);
+  const [loadingPrompt, setLoadingPrompt] = useState(false);
   const [loadingPhase, setLoadingPhase] = useState<string>(''); // For detailed status
   const [saving, setSaving] = useState(false);
 
   const suggestions = activeTab === 'image' ? IMAGE_SUGGESTIONS : VIDEO_SUGGESTIONS;
+
+  const handleAutoPrompt = async () => {
+    setLoadingPrompt(true);
+    try {
+        const creativePrompt = await generateCreativePrompt(activeTab);
+        setPrompt(creativePrompt);
+    } catch (error) {
+        console.error("Prompt generation failed", error);
+    } finally {
+        setLoadingPrompt(false);
+    }
+  };
 
   const handleGenerate = async () => {
     if (!prompt) return;
@@ -148,17 +161,26 @@ const AiGenerator: React.FC<AiGeneratorProps> = ({ onSave }) => {
                 </div>
 
                 <div className="space-y-4 flex-1">
-                    <div>
-                        <label className="block text-sm font-medium text-slate-300 mb-2">
+                    <div className="flex justify-between items-center">
+                        <label className="block text-sm font-medium text-slate-300">
                             {activeTab === 'image' ? 'Görsel Tarifi' : 'Video Senaryosu'}
                         </label>
-                        <textarea 
-                            value={prompt}
-                            onChange={(e) => setPrompt(e.target.value)}
-                            placeholder={activeTab === 'image' ? "Örn: Mavi gözlü bir kedi..." : "Örn: Yağmurda yürüyen neon kedi, sinematik..."}
-                            className={`w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none h-32 resize-none transition-colors ${activeTab === 'image' ? 'focus:border-purple-500' : 'focus:border-blue-500'}`}
-                        />
+                        <button 
+                            onClick={handleAutoPrompt}
+                            disabled={loadingPrompt || loading}
+                            className="flex items-center gap-1.5 text-xs font-bold text-amber-400 hover:text-amber-300 transition-colors bg-amber-500/10 px-2 py-1 rounded-lg border border-amber-500/20 hover:border-amber-500/50"
+                        >
+                            {loadingPrompt ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />}
+                            Sihirli Prompt Yaz
+                        </button>
                     </div>
+
+                    <textarea 
+                        value={prompt}
+                        onChange={(e) => setPrompt(e.target.value)}
+                        placeholder={activeTab === 'image' ? "Örn: Mavi gözlü bir kedi..." : "Örn: Yağmurda yürüyen neon kedi, sinematik..."}
+                        className={`w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none h-32 resize-none transition-colors ${activeTab === 'image' ? 'focus:border-purple-500' : 'focus:border-blue-500'}`}
+                    />
                     
                     <div className="flex flex-wrap gap-2">
                         {suggestions.map((s, i) => (
