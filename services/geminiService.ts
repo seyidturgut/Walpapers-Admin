@@ -83,8 +83,8 @@ export const generateMediaMetadata = async (
 export const generateWallpaper = async (prompt: string): Promise<string> => {
   const ai = getAiClient();
   
-  // Enhance prompt for better wallpaper quality
-  const enhancedPrompt = `A high quality, mobile wallpaper (vertical aspect ratio) of: ${prompt}. Cinematic lighting, detailed texture, 8k resolution.`;
+  // Enhance prompt for maximum quality 2K generation
+  const enhancedPrompt = `Ultra-realistic 2K mobile wallpaper (9:16 vertical) of: ${prompt}. Masterpiece, hyper-detailed, cinematic lighting, ray tracing, sharp focus, 8k resolution, high dynamic range, professional photography.`;
 
   try {
     const response = await ai.models.generateContent({
@@ -99,7 +99,7 @@ export const generateWallpaper = async (prompt: string): Promise<string> => {
       config: {
         imageConfig: {
           aspectRatio: "9:16", // Perfect for mobile wallpapers
-          imageSize: "1K"
+          imageSize: "2K"      // 2K resolution
         },
       },
     });
