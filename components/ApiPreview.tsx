@@ -1,27 +1,36 @@
+
 import React, { useState } from 'react';
-import { MediaItem, MediaType } from '../types';
-import { Copy, Download, Code, Server, Smartphone, Check } from 'lucide-react';
+import { MediaItem, MediaType, AppProfile } from '../types';
+import { Copy, Download, Code, Server, Smartphone, Check, Database } from 'lucide-react';
 
 interface ApiPreviewProps {
   items: MediaItem[];
+  activeApp: AppProfile;
 }
 
-const ApiPreview: React.FC<ApiPreviewProps> = ({ items }) => {
+const ApiPreview: React.FC<ApiPreviewProps> = ({ items, activeApp }) => {
   const [hostUrl, setHostUrl] = useState('https://your-backend-domain.com/assets');
   const [activeTab, setActiveTab] = useState<'json' | 'kotlin'>('json');
   const [copied, setCopied] = useState(false);
+
+  // Filter items for current app
+  const appItems = items.filter(i => i.appId === activeApp.id);
 
   // 1. JSON Structure Generator
   const generateJson = () => {
     const apiStructure = {
       status: "success",
+      app_profile: {
+          id: activeApp.id,
+          name: activeApp.name,
+          description: activeApp.description
+      },
       metadata: {
-        app_name: "Purrfect Wallpapers",
-        version: "1.0.0",
-        count: items.length,
+        version: "1.1.0",
+        count: appItems.length,
         generated_at: new Date().toISOString(),
       },
-      data: items.map(item => ({
+      data: appItems.map(item => ({
         id: item.id,
         type: item.type.toLowerCase(), // 'image' or 'video'
         title: item.title,
@@ -48,12 +57,19 @@ import com.google.gson.annotations.SerializedName
 
 data class WallpaperResponse(
     @SerializedName("status") val status: String,
+    @SerializedName("app_profile") val appProfile: AppProfile,
     @SerializedName("metadata") val metadata: Metadata,
     @SerializedName("data") val items: List<WallpaperItem>
 )
 
+data class AppProfile(
+    @SerializedName("id") val id: String,
+    @SerializedName("name") val name: String,
+    @SerializedName("description") val description: String
+)
+
 data class Metadata(
-    @SerializedName("app_name") val appName: String,
+    @SerializedName("version") val version: String,
     @SerializedName("count") val count: Int
 )
 
@@ -86,7 +102,7 @@ data class WallpaperItem(
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = activeTab === 'json' ? 'wallpapers_api.json' : 'WallpaperModels.kt';
+    a.download = activeTab === 'json' ? `${activeApp.name.replace(/\s+/g, '_').toLowerCase()}_api.json` : 'WallpaperModels.kt';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -102,10 +118,10 @@ data class WallpaperItem(
                 <div>
                     <h2 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
                         <Server className="text-purple-400" />
-                        API Configuration
+                        API Endpoint: {activeApp.name}
                     </h2>
                     <p className="text-slate-400 text-sm">
-                        Sunucu adresinizi girerek JSON çıktısındaki linkleri güncelleyebilirsiniz.
+                        Şu anda <strong>{activeApp.name}</strong> uygulaması için veriler JSON formatına dönüştürülüyor.
                     </p>
                 </div>
                 
@@ -122,6 +138,11 @@ data class WallpaperItem(
                         />
                     </div>
                 </div>
+            </div>
+            
+            <div className="mt-4 flex items-center gap-2 text-xs text-slate-500 bg-slate-900/50 p-2 rounded-lg border border-slate-800">
+                <Database className="w-3 h-3" />
+                <span>Bu çıktıda sadece <strong>{appItems.length}</strong> adet medya listelenmektedir (Filtre: {activeApp.name}).</span>
             </div>
         </div>
 

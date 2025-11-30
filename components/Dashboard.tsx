@@ -1,18 +1,24 @@
+
 import React from 'react';
-import { MediaItem, MediaType } from '../types';
-import { Trash2, Film, Image as ImageIcon, Search, Pencil } from 'lucide-react';
+import { MediaItem, MediaType, AppProfile } from '../types';
+import { Trash2, Film, Image as ImageIcon, Search, Pencil, Plus } from 'lucide-react';
 
 interface DashboardProps {
   items: MediaItem[];
+  activeApp: AppProfile;
   onDelete: (id: string) => void;
   onEdit: (item: MediaItem) => void;
   onOpenUpload: () => void;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ items, onDelete, onEdit, onOpenUpload }) => {
+const Dashboard: React.FC<DashboardProps> = ({ items, activeApp, onDelete, onEdit, onOpenUpload }) => {
   const [filter, setFilter] = React.useState('');
 
-  const filteredItems = items.filter(item => 
+  // 1. Filter by Active App
+  const appItems = items.filter(item => item.appId === activeApp.id);
+
+  // 2. Filter by Search Query
+  const filteredItems = appItems.filter(item => 
     item.title.toLowerCase().includes(filter.toLowerCase()) ||
     item.tags.some(tag => tag.toLowerCase().includes(filter.toLowerCase()))
   );
@@ -22,16 +28,16 @@ const Dashboard: React.FC<DashboardProps> = ({ items, onDelete, onEdit, onOpenUp
       {/* Header Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-lg">
-          <p className="text-slate-400 text-sm font-medium mb-1">Total Assets</p>
-          <h3 className="text-3xl font-bold text-white">{items.length}</h3>
+          <p className="text-slate-400 text-sm font-medium mb-1">Total Assets ({activeApp.name})</p>
+          <h3 className="text-3xl font-bold text-white">{appItems.length}</h3>
         </div>
         <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-lg">
           <p className="text-slate-400 text-sm font-medium mb-1">Images</p>
-          <h3 className="text-3xl font-bold text-purple-400">{items.filter(i => i.type === MediaType.IMAGE).length}</h3>
+          <h3 className="text-3xl font-bold text-purple-400">{appItems.filter(i => i.type === MediaType.IMAGE).length}</h3>
         </div>
         <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-lg">
           <p className="text-slate-400 text-sm font-medium mb-1">Videos</p>
-          <h3 className="text-3xl font-bold text-blue-400">{items.filter(i => i.type === MediaType.VIDEO).length}</h3>
+          <h3 className="text-3xl font-bold text-blue-400">{appItems.filter(i => i.type === MediaType.VIDEO).length}</h3>
         </div>
       </div>
 
@@ -41,7 +47,7 @@ const Dashboard: React.FC<DashboardProps> = ({ items, onDelete, onEdit, onOpenUp
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 w-5 h-5" />
             <input 
                 type="text" 
-                placeholder="Search by title or tag..." 
+                placeholder={`Search in ${activeApp.name}...`} 
                 value={filter}
                 onChange={(e) => setFilter(e.target.value)}
                 className="w-full bg-slate-900 border border-slate-700 rounded-lg pl-10 pr-4 py-2.5 text-white placeholder-slate-600 focus:outline-none focus:border-purple-500 transition-colors"
@@ -49,19 +55,20 @@ const Dashboard: React.FC<DashboardProps> = ({ items, onDelete, onEdit, onOpenUp
         </div>
         <button 
             onClick={onOpenUpload}
-            className="w-full md:w-auto px-6 py-2.5 bg-purple-600 hover:bg-purple-500 text-white rounded-lg font-medium shadow-lg shadow-purple-900/20 transition-all"
+            className="w-full md:w-auto px-6 py-2.5 bg-purple-600 hover:bg-purple-500 text-white rounded-lg font-medium shadow-lg shadow-purple-900/20 transition-all flex items-center justify-center gap-2"
         >
-            + Add New Content
+            <Plus className="w-5 h-5" /> Add Content to {activeApp.name}
         </button>
       </div>
 
       {/* Grid */}
       {filteredItems.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 text-slate-500">
+        <div className="flex flex-col items-center justify-center py-20 text-slate-500 border-2 border-dashed border-slate-800 rounded-2xl">
             <div className="bg-slate-800 p-4 rounded-full mb-4">
                 <Search className="w-8 h-8 opacity-50" />
             </div>
-            <p className="text-lg">No content found matching your criteria.</p>
+            <p className="text-lg font-semibold text-slate-400">No content found in {activeApp.name}.</p>
+            <p className="text-sm">Start by adding new media or use AI Studio.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">

@@ -1,5 +1,6 @@
+
 import { GoogleGenAI, Type, Schema } from "@google/genai";
-import { AiMetadataResponse } from "../types";
+import { AiMetadataResponse, AppProfile } from "../types";
 
 /**
  * Retrieves the API Key from environment variables or local storage.
@@ -30,28 +31,35 @@ const RESPONSE_SCHEMA: Schema = {
     },
     description: {
       type: Type.STRING,
-      description: "A warm, engaging description of the cat content suitable for an app.",
+      description: "A warm, engaging description suitable for the app audience.",
     },
     tags: {
       type: Type.ARRAY,
       items: { type: Type.STRING },
-      description: "5-7 relevant tags for search functionality (e.g., 'fluffy', 'sleeping', 'funny').",
+      description: "5-7 relevant tags for search functionality.",
     },
   },
   required: ["title", "description", "tags"],
 };
 
 /**
- * Generates metadata for an image or a video frame.
+ * Generates metadata for an image or a video frame, respecting the App Context.
  */
 export const generateMediaMetadata = async (
   base64Data: string,
-  mimeType: string
+  mimeType: string,
+  appContext?: AppProfile
 ): Promise<AiMetadataResponse> => {
   const ai = getAiClient();
 
   // Clean the base64 string if it contains the header
   const cleanBase64 = base64Data.replace(/^data:(image|video)\/\w+;base64,/, "");
+
+  // Dynamic context based on the App
+  const appName = appContext?.name || "General Wallpaper App";
+  const appDesc = appContext?.description || "mobile wallpapers";
+  
+  const promptText = `Analyze this image. It is content for an Android application named '${appName}' which is about: ${appDesc}. Generate a creative title, a short description, and relevant tags in JSON format that fits this specific app's theme.`;
 
   try {
     const response = await ai.models.generateContent({
@@ -65,14 +73,14 @@ export const generateMediaMetadata = async (
             },
           },
           {
-            text: "Analyze this image. It is content for a 'Cat Wallpaper & Video' Android application. Generate a creative title, a short description, and relevant tags in JSON format.",
+            text: promptText,
           },
         ],
       },
       config: {
         responseMimeType: "application/json",
         responseSchema: RESPONSE_SCHEMA,
-        systemInstruction: "You are a content manager for a popular cat lover app. Your tone is fun, lighthearted, and descriptive.",
+        systemInstruction: `You are a content manager for '${appName}'. Your tone should match the app's niche (e.g., funny for memes, serene for nature, cute for pets).`,
       },
     });
 
@@ -89,19 +97,22 @@ export const generateMediaMetadata = async (
 };
 
 /**
- * Generates a creative prompt for image or video generation.
+ * Generates a creative prompt for image or video generation based on App Context.
  */
-export const generateCreativePrompt = async (type: 'image' | 'video'): Promise<string> => {
+export const generateCreativePrompt = async (type: 'image' | 'video', appContext?: AppProfile): Promise<string> => {
   const ai = getAiClient();
   
+  const appName = appContext?.name || "Mobile Wallpaper";
+  const contextKeywords = appContext?.aiContext || "aesthetic, beautiful, 4k";
+
   const systemInstruction = type === 'image' 
-    ? "You are an expert prompt engineer for AI Image Generators (like Midjourney or Gemini). Create a single, highly detailed, artistic, and visually stunning prompt for a mobile wallpaper featuring a cat. Focus on lighting, texture, color palette, and mood. Keep it under 60 words. Output ONLY the prompt text."
-    : "You are an expert prompt engineer for AI Video Generators (like Veo or Sora). Create a single, descriptive prompt for a short, looping vertical video featuring a cat. Focus on movement, physical actions, lighting, and cinematic atmosphere. Keep it under 60 words. Output ONLY the prompt text.";
+    ? `You are an expert prompt engineer for AI Image Generators. The user is managing an app called '${appName}' focusing on: ${contextKeywords}. Create a single, highly detailed, artistic, and visually stunning prompt for a mobile wallpaper that fits this specific app theme perfectly. Keep it under 60 words. Output ONLY the prompt text.`
+    : `You are an expert prompt engineer for AI Video Generators. The user is managing an app called '${appName}' focusing on: ${contextKeywords}. Create a single, descriptive prompt for a short, looping vertical video that fits this specific app theme. Focus on movement and atmosphere. Keep it under 60 words. Output ONLY the prompt text.`;
 
   try {
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
-      contents: "Generate a random, creative prompt now.",
+      contents: `Generate a random, creative prompt for the '${appName}' app now.`,
       config: {
         systemInstruction: systemInstruction,
         temperature: 1.2, // High creativity
@@ -123,7 +134,7 @@ export const generateWallpaper = async (prompt: string): Promise<string> => {
   const ai = getAiClient();
   
   // Enhance prompt for maximum quality 2K generation
-  const enhancedPrompt = `Ultra-realistic 2K mobile wallpaper (9:16 vertical) of: ${prompt}. Masterpiece, hyper-detailed, cinematic lighting, ray tracing, sharp focus, 8k resolution, high dynamic range, professional photography.`;
+  const enhancedPrompt = `Ultra-realistic 2K mobile wallpaper (9:16 vertical): ${prompt}. Masterpiece, hyper-detailed, cinematic lighting, sharp focus, 8k resolution.`;
 
   try {
     const response = await ai.models.generateContent({
@@ -168,7 +179,7 @@ export const generateVideoWallpaper = async (prompt: string): Promise<string> =>
   const apiKey = getApiKey();
 
   // Enhance prompt specifically for short video loops
-  const enhancedPrompt = `A short, looping cinematic vertical video of: ${prompt}. High quality, slow motion, photorealistic, suitable for phone live wallpaper.`;
+  const enhancedPrompt = `A short, looping cinematic vertical video: ${prompt}. High quality, slow motion, photorealistic, suitable for phone live wallpaper.`;
 
   try {
     console.log("Starting video generation...");

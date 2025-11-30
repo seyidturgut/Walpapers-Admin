@@ -1,28 +1,15 @@
+
 import React, { useState } from 'react';
 import { Wand2, Loader2, Save, RefreshCw, Sparkles, TextCursorInput, Film, Image as ImageIcon, Download, Zap } from 'lucide-react';
 import { generateWallpaper, generateMediaMetadata, generateVideoWallpaper, generateCreativePrompt } from '../services/geminiService';
-import { MediaType, MediaItem, AiMetadataResponse } from '../types';
+import { MediaType, MediaItem, AiMetadataResponse, AppProfile } from '../types';
 
 interface AiGeneratorProps {
   onSave: (item: Omit<MediaItem, 'id' | 'createdAt'>) => void;
+  activeApp: AppProfile;
 }
 
-const IMAGE_SUGGESTIONS = [
-  "Cyberpunk neon cat in a rainy city",
-  "Fluffy white persian cat wearing sunglasses on a beach",
-  "Minimalist cat silhouette against a sunset",
-  "Astronaut cat floating in galaxy space",
-  "Watercolor painting of a sleeping ginger cat"
-];
-
-const VIDEO_SUGGESTIONS = [
-  "A cat slowly blinking in sunlight, cinematic",
-  "Kitten chasing a butterfly in slow motion",
-  "Cat sleeping and breathing softly, cozy atmosphere",
-  "Neon robotic cat walking in rain"
-];
-
-const AiGenerator: React.FC<AiGeneratorProps> = ({ onSave }) => {
+const AiGenerator: React.FC<AiGeneratorProps> = ({ onSave, activeApp }) => {
   const [activeTab, setActiveTab] = useState<'image' | 'video'>('image');
   const [prompt, setPrompt] = useState('');
   
@@ -36,12 +23,27 @@ const AiGenerator: React.FC<AiGeneratorProps> = ({ onSave }) => {
   const [loadingPhase, setLoadingPhase] = useState<string>(''); // For detailed status
   const [saving, setSaving] = useState(false);
 
+  // Suggestions dynamic based on App Context? For now, we rely on Auto Prompt.
+  // But we can show some generic ones.
+  const IMAGE_SUGGESTIONS = [
+    `Best ${activeApp.aiContext} wallpaper`,
+    `Abstract ${activeApp.name} background`,
+    `Realistic ${activeApp.aiContext} scene`,
+  ];
+
+  const VIDEO_SUGGESTIONS = [
+    `Cinematic ${activeApp.aiContext} video`,
+    `Looping ${activeApp.name} motion`,
+    `Slow motion ${activeApp.aiContext}`,
+  ];
+
   const suggestions = activeTab === 'image' ? IMAGE_SUGGESTIONS : VIDEO_SUGGESTIONS;
 
   const handleAutoPrompt = async () => {
     setLoadingPrompt(true);
     try {
-        const creativePrompt = await generateCreativePrompt(activeTab);
+        // Pass the Active App Context to generate relevant prompts
+        const creativePrompt = await generateCreativePrompt(activeTab, activeApp);
         setPrompt(creativePrompt);
     } catch (error) {
         console.error("Prompt generation failed", error);
@@ -63,9 +65,9 @@ const AiGenerator: React.FC<AiGeneratorProps> = ({ onSave }) => {
         const base64Image = await generateWallpaper(prompt);
         setGeneratedMediaUrl(base64Image);
         
-        // 2. Metadata
+        // 2. Metadata with App Context
         setLoadingPhase("İçerik analiz ediliyor...");
-        const generatedMeta = await generateMediaMetadata(base64Image, 'image/png');
+        const generatedMeta = await generateMediaMetadata(base64Image, 'image/png', activeApp);
         setMetadata(generatedMeta);
 
       } else {
@@ -73,12 +75,8 @@ const AiGenerator: React.FC<AiGeneratorProps> = ({ onSave }) => {
         const base64Video = await generateVideoWallpaper(prompt);
         setGeneratedMediaUrl(base64Video);
 
-        // 2. Metadata (using a frame or just generic for now, let's use the video bytes but mime type video/mp4)
-        // Note: Gemini 2.5 Flash can analyze video bytes directly if small enough, or we rely on prompt context.
-        // For simplicity/robustness here, we'll try to analyze the video bytes.
         setLoadingPhase("Video analiz ediliyor...");
-        // Usually we send a frame, but for now sending video bytes to Gemini Flash (Multimodal)
-        const generatedMeta = await generateMediaMetadata(base64Video, 'video/mp4');
+        const generatedMeta = await generateMediaMetadata(base64Video, 'video/mp4', activeApp);
         setMetadata(generatedMeta);
       }
 
@@ -98,6 +96,7 @@ const AiGenerator: React.FC<AiGeneratorProps> = ({ onSave }) => {
     // Simulate a small delay for better UX
     setTimeout(() => {
         onSave({
+            appId: activeApp.id, // Important: Save to current app
             type: activeTab === 'image' ? MediaType.IMAGE : MediaType.VIDEO,
             url: generatedMediaUrl,
             title: metadata.title,
@@ -105,7 +104,7 @@ const AiGenerator: React.FC<AiGeneratorProps> = ({ onSave }) => {
             tags: metadata.tags
         });
         setSaving(false);
-        alert("Galeriye başarıyla eklendi!");
+        alert(`${activeApp.name} galerisine başarıyla eklendi!`);
         // Reset after save
         setGeneratedMediaUrl(null);
         setMetadata(null);
@@ -121,7 +120,8 @@ const AiGenerator: React.FC<AiGeneratorProps> = ({ onSave }) => {
     
     const timestamp = new Date().getTime();
     const extension = activeTab === 'image' ? 'png' : 'mp4';
-    const filename = `purrfect-ai-${timestamp}.${extension}`;
+    const cleanAppName = activeApp.name.replace(/\s+/g, '-').toLowerCase();
+    const filename = `${cleanAppName}-${timestamp}.${extension}`;
     
     link.download = filename;
     document.body.appendChild(link);
@@ -134,13 +134,13 @@ const AiGenerator: React.FC<AiGeneratorProps> = ({ onSave }) => {
         {/* Left Panel: Controls */}
         <div className="flex flex-col gap-6">
             <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-xl flex flex-col h-full">
-                <div className="mb-6">
+                <div className="mb-6 border-b border-slate-700 pb-4">
                     <h2 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
                         <Sparkles className="text-amber-400" />
                         AI Stüdyo
                     </h2>
                     <p className="text-slate-400 text-sm">
-                        Gemini 3 Pro ile görsel, Veo ile video üretin. Otomatik içerik analizi dahildir.
+                        Çalışılan Uygulama: <span className="text-purple-400 font-bold">{activeApp.name}</span>
                     </p>
                 </div>
 
@@ -171,14 +171,14 @@ const AiGenerator: React.FC<AiGeneratorProps> = ({ onSave }) => {
                             className="flex items-center gap-1.5 text-xs font-bold text-amber-400 hover:text-amber-300 transition-colors bg-amber-500/10 px-2 py-1 rounded-lg border border-amber-500/20 hover:border-amber-500/50"
                         >
                             {loadingPrompt ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />}
-                            Sihirli Prompt Yaz
+                            {activeApp.name} için Prompt Yaz
                         </button>
                     </div>
 
                     <textarea 
                         value={prompt}
                         onChange={(e) => setPrompt(e.target.value)}
-                        placeholder={activeTab === 'image' ? "Örn: Mavi gözlü bir kedi..." : "Örn: Yağmurda yürüyen neon kedi, sinematik..."}
+                        placeholder={`${activeApp.name} için bir şeyler yazın... (Context: ${activeApp.aiContext})`}
                         className={`w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none h-32 resize-none transition-colors ${activeTab === 'image' ? 'focus:border-purple-500' : 'focus:border-blue-500'}`}
                     />
                     
@@ -243,6 +243,7 @@ const AiGenerator: React.FC<AiGeneratorProps> = ({ onSave }) => {
                     <div className="space-y-2">
                         <h3 className="text-white font-medium text-lg">AI Çalışıyor</h3>
                         <p className="text-sm text-slate-400 max-w-xs mx-auto">{loadingPhase}</p>
+                        <p className="text-xs text-slate-500">Uygulama: {activeApp.name}</p>
                     </div>
                  </div>
             ) : generatedMediaUrl ? (

@@ -1,16 +1,18 @@
+
 import React, { useState, useEffect } from 'react';
 import { UploadCloud, X, Wand2, Film, Image as ImageIcon, Loader2, CheckCircle2 } from 'lucide-react';
-import { MediaType, MediaItem, AiMetadataResponse } from '../types';
+import { MediaType, MediaItem, AiMetadataResponse, AppProfile } from '../types';
 import { generateMediaMetadata } from '../services/geminiService';
 import { fileToBase64, extractVideoFrame } from '../utils/mediaUtils';
 
 interface UploadModalProps {
-  onSave: (item: Omit<MediaItem, 'id' | 'createdAt'>, id?: string) => void; // id is optional, present if editing
+  onSave: (item: Omit<MediaItem, 'id' | 'createdAt'>, id?: string) => void;
   onCancel: () => void;
   initialItem?: MediaItem | null;
+  activeApp: AppProfile;
 }
 
-const UploadModal: React.FC<UploadModalProps> = ({ onSave, onCancel, initialItem }) => {
+const UploadModal: React.FC<UploadModalProps> = ({ onSave, onCancel, initialItem, activeApp }) => {
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string>('');
   const [mediaType, setMediaType] = useState<MediaType>(MediaType.IMAGE);
@@ -57,14 +59,13 @@ const UploadModal: React.FC<UploadModalProps> = ({ onSave, onCancel, initialItem
       let aiInputBase64 = previewUrl;
       let aiInputMime = mediaType === MediaType.VIDEO ? 'video/mp4' : 'image/jpeg';
 
-      // If a NEW file is uploaded and it is video, we might want to frame extract for optimization
-      // But if we are editing and didn't change the file, previewUrl is a base64 string.
       if (mediaType === MediaType.VIDEO && file) {
          aiInputBase64 = await extractVideoFrame(file);
          aiInputMime = 'image/jpeg';
       }
 
-      const metadata: AiMetadataResponse = await generateMediaMetadata(aiInputBase64, aiInputMime);
+      // Pass Active App for Context Aware generation
+      const metadata: AiMetadataResponse = await generateMediaMetadata(aiInputBase64, aiInputMime, activeApp);
       
       setTitle(metadata.title);
       setDescription(metadata.description);
@@ -85,12 +86,13 @@ const UploadModal: React.FC<UploadModalProps> = ({ onSave, onCancel, initialItem
     const tagArray = tags.split(',').map(t => t.trim()).filter(t => t.length > 0);
 
     onSave({
+        appId: activeApp.id, // Assign to current app
         type: mediaType,
         url: previewUrl,
         title,
         description,
         tags: tagArray
-    }, initialItem?.id); // Pass ID if editing
+    }, initialItem?.id); 
   };
 
   const isEditMode = !!initialItem;
@@ -98,10 +100,15 @@ const UploadModal: React.FC<UploadModalProps> = ({ onSave, onCancel, initialItem
   return (
     <div className="bg-slate-800 rounded-2xl border border-slate-700 shadow-xl overflow-hidden animate-fade-in max-w-4xl mx-auto">
       <div className="p-6 border-b border-slate-700 flex justify-between items-center bg-slate-900/50">
-        <h2 className="text-2xl font-bold text-white flex items-center gap-2">
-            <UploadCloud className="text-purple-500" /> 
-            {isEditMode ? 'Edit Content' : 'Upload Content'}
-        </h2>
+        <div>
+            <h2 className="text-2xl font-bold text-white flex items-center gap-2">
+                <UploadCloud className="text-purple-500" /> 
+                {isEditMode ? 'Edit Content' : 'Upload Content'}
+            </h2>
+            <p className="text-xs text-slate-400 mt-1">
+                Adding to: <span className="text-purple-400 font-bold">{activeApp.name}</span>
+            </p>
+        </div>
         <button onClick={onCancel} className="text-slate-400 hover:text-white transition-colors">
             <X className="w-6 h-6" />
         </button>
@@ -125,7 +132,6 @@ const UploadModal: React.FC<UploadModalProps> = ({ onSave, onCancel, initialItem
                         ) : (
                             <video src={previewUrl} className="w-full h-full object-cover" controls />
                         )}
-                        {/* Allow changing file even in edit mode */}
                         <label className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
                            <div className="bg-black/60 text-white px-4 py-2 rounded-full backdrop-blur-md text-sm font-medium">
                               Change File

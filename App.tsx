@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
@@ -6,14 +7,27 @@ import ApiPreview from './components/ApiPreview';
 import LoginScreen from './components/LoginScreen';
 import AiGenerator from './components/AiGenerator';
 import SettingsView from './components/SettingsView';
-import { AppState, MediaItem, MediaType } from './types';
+import { AppState, MediaItem, MediaType, AppProfile } from './types';
 import { Key, ExternalLink, ArrowRight, Loader2 } from 'lucide-react';
 import { getApiKey } from './services/geminiService';
 
-// Mock data to start with if empty
+const INITIAL_CAT_APP_ID = 'app_cat_default';
+
+// Default App Profile
+const DEFAULT_APPS: AppProfile[] = [
+  {
+    id: INITIAL_CAT_APP_ID,
+    name: 'Cat Wallpapers',
+    description: 'A collection of cute, funny and artistic cat wallpapers.',
+    aiContext: 'cat, kitten, feline, pet, meow, furry, paws'
+  }
+];
+
+// Mock data to start with if empty, now with appId
 const INITIAL_DATA: MediaItem[] = [
   {
     id: '1',
+    appId: INITIAL_CAT_APP_ID,
     type: MediaType.IMAGE,
     url: 'https://picsum.photos/id/40/300/500', 
     title: 'Curious Tabby',
@@ -23,6 +37,7 @@ const INITIAL_DATA: MediaItem[] = [
   },
   {
     id: '2',
+    appId: INITIAL_CAT_APP_ID,
     type: MediaType.IMAGE,
     url: 'https://picsum.photos/id/219/300/500', 
     title: 'Lion in the Grass',
@@ -38,13 +53,33 @@ const App: React.FC = () => {
   const [checkingKey, setCheckingKey] = useState<boolean>(false);
 
   const [view, setView] = useState<AppState['view']>('dashboard');
+  
+  // App Management State
+  const [apps, setApps] = useState<AppProfile[]>(() => {
+    const savedApps = localStorage.getItem('purrfect_apps');
+    return savedApps ? JSON.parse(savedApps) : DEFAULT_APPS;
+  });
+  
+  const [activeAppId, setActiveAppId] = useState<string>(() => {
+    const savedActive = localStorage.getItem('purrfect_active_app');
+    return savedActive && apps.find(a => a.id === savedActive) ? savedActive : apps[0].id;
+  });
+
   const [items, setItems] = useState<MediaItem[]>(() => {
     const saved = localStorage.getItem('purrfect_items');
-    return saved ? JSON.parse(saved) : INITIAL_DATA;
+    let loadedItems = saved ? JSON.parse(saved) : INITIAL_DATA;
+    
+    // Migration: If existing items don't have appId, assign them to the first app
+    if (loadedItems.length > 0 && !loadedItems[0].appId) {
+        loadedItems = loadedItems.map((item: any) => ({ ...item, appId: apps[0].id }));
+    }
+    return loadedItems;
   });
 
   // State for editing
   const [editingItem, setEditingItem] = useState<MediaItem | null>(null);
+
+  const activeApp = apps.find(a => a.id === activeAppId) || apps[0];
 
   // Check for existing session
   useEffect(() => {
@@ -61,26 +96,34 @@ const App: React.FC = () => {
     }
   }, [isAuthenticated]);
 
+  // Persist State
+  useEffect(() => {
+    localStorage.setItem('purrfect_items', JSON.stringify(items));
+  }, [items]);
+
+  useEffect(() => {
+    localStorage.setItem('purrfect_apps', JSON.stringify(apps));
+  }, [apps]);
+
+  useEffect(() => {
+    localStorage.setItem('purrfect_active_app', activeAppId);
+  }, [activeAppId]);
+
+
   const checkApiKey = async () => {
     setCheckingKey(true);
     try {
-      // 1. Check Manual Key (LocalStorage) or Env
       const manualKey = getApiKey();
       if (manualKey) {
         setHasApiKey(true);
         setCheckingKey(false);
         return;
       }
-
-      // 2. Check AI Studio Embedded Key (if available)
       const win = window as any;
       if (win.aistudio && win.aistudio.hasSelectedApiKey) {
         const hasKey = await win.aistudio.hasSelectedApiKey();
         setHasApiKey(hasKey);
       } else {
-        // Fallback: If not in AI Studio and no local key, we assume false 
-        // unless we want to allow access to view items but not generate
-        // For now, let's force a key for the "Admin" experience.
         setHasApiKey(false);
       }
     } catch (e) {
@@ -93,15 +136,11 @@ const App: React.FC = () => {
 
   const handleSelectKey = async () => {
     try {
-      // Cast window to any to avoid type conflict with global AIStudio definition
       const win = window as any;
       if (win.aistudio && win.aistudio.openSelectKey) {
         await win.aistudio.openSelectKey();
         setHasApiKey(true);
       } else {
-        // If not in AI Studio environment, we can't open selector.
-        // But we can redirect user to Settings if they somehow bypass.
-        // For the blocking screen, we'll just show the manual input there too.
         alert("AI Studio ortamında değilsiniz. Lütfen manuel anahtar girişini kullanın.");
       }
     } catch (e) {
@@ -119,10 +158,6 @@ const App: React.FC = () => {
     }
   };
 
-  useEffect(() => {
-    localStorage.setItem('purrfect_items', JSON.stringify(items));
-  }, [items]);
-
   const handleLogin = () => {
     sessionStorage.setItem('purrfect_auth', 'true');
     setIsAuthenticated(true);
@@ -134,7 +169,28 @@ const App: React.FC = () => {
     setHasApiKey(false);
   };
 
-  // Handles both Adding New and Updating Existing items
+  // App Management Functions
+  const handleAddApp = (newApp: AppProfile) => {
+    setApps([...apps, newApp]);
+  };
+
+  const handleDeleteApp = (appId: string) => {
+    if (apps.length <= 1) {
+        alert("En az bir uygulama kalmalıdır.");
+        return;
+    }
+    // Filter out items belonging to this app
+    const newItems = items.filter(i => i.appId !== appId);
+    setItems(newItems);
+
+    const newApps = apps.filter(a => a.id !== appId);
+    setApps(newApps);
+    
+    if (activeAppId === appId) {
+        setActiveAppId(newApps[0].id);
+    }
+  };
+
   const handleSaveItem = (itemData: Omit<MediaItem, 'id' | 'createdAt'>, existingId?: string) => {
     if (existingId) {
         // Edit Mode
@@ -153,7 +209,6 @@ const App: React.FC = () => {
         setItems(prev => [newItem, ...prev]);
     }
     
-    // Reset and close
     setEditingItem(null);
     if (view === 'upload') {
         setView('dashboard');
@@ -168,7 +223,7 @@ const App: React.FC = () => {
 
   const handleEditItem = (item: MediaItem) => {
     setEditingItem(item);
-    setView('upload'); // Reuse upload view for editing
+    setView('upload');
   };
 
   const handleCancelUpload = () => {
@@ -179,15 +234,26 @@ const App: React.FC = () => {
   const renderContent = () => {
     switch (view) {
       case 'dashboard':
-        return <Dashboard items={items} onDelete={handleDeleteItem} onEdit={handleEditItem} onOpenUpload={() => { setEditingItem(null); setView('upload'); }} />;
+        return <Dashboard 
+            items={items} 
+            activeApp={activeApp}
+            onDelete={handleDeleteItem} 
+            onEdit={handleEditItem} 
+            onOpenUpload={() => { setEditingItem(null); setView('upload'); }} 
+        />;
       case 'upload':
-        return <UploadModal onSave={handleSaveItem} onCancel={handleCancelUpload} initialItem={editingItem} />;
+        return <UploadModal 
+            onSave={handleSaveItem} 
+            onCancel={handleCancelUpload} 
+            initialItem={editingItem} 
+            activeApp={activeApp}
+        />;
       case 'ai-generator':
-        return <AiGenerator onSave={handleSaveItem} />;
+        return <AiGenerator onSave={handleSaveItem} activeApp={activeApp} />;
       case 'api-preview':
-        return <ApiPreview items={items} />;
+        return <ApiPreview items={items} activeApp={activeApp} />;
       case 'settings':
-        return <SettingsView />;
+        return <SettingsView apps={apps} onAddApp={handleAddApp} onDeleteApp={handleDeleteApp} />;
       default:
         return <div>Not Found</div>;
     }
@@ -197,7 +263,6 @@ const App: React.FC = () => {
     return <LoginScreen onLogin={handleLogin} />;
   }
 
-  // Blocking screen if API Key is not selected AND we are not in Settings (to allow user to fix it)
   if (checkingKey) {
      return (
         <div className="min-h-screen bg-slate-900 flex items-center justify-center text-white">
@@ -218,7 +283,6 @@ const App: React.FC = () => {
             Gemini 3 Pro ve Veo modellerini kullanmak için API anahtarına ihtiyacınız var.
           </p>
           
-          {/* Option A: Manual Input */}
           <form onSubmit={handleManualKeyInput} className="mb-6">
               <div className="relative">
                   <input 
@@ -261,7 +325,13 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 flex">
-      <Sidebar currentView={view} onChangeView={(v) => { setEditingItem(null); setView(v); }} />
+      <Sidebar 
+        currentView={view} 
+        onChangeView={(v) => { setEditingItem(null); setView(v); }} 
+        apps={apps}
+        activeAppId={activeAppId}
+        onChangeApp={setActiveAppId}
+      />
       
       <main className="flex-1 md:ml-64 p-4 md:p-8 overflow-y-auto h-screen relative">
         <div className="max-w-7xl mx-auto animate-fade-in">
@@ -269,7 +339,6 @@ const App: React.FC = () => {
              <div className="md:hidden">
                 <h1 className="text-xl font-bold">PurrfectAdmin</h1>
              </div>
-             {/* Header Spacer for desktop or Logout button */}
              <div className="hidden md:block"></div>
              
              <button 
@@ -288,12 +357,15 @@ const App: React.FC = () => {
                 {view === 'api-preview' && 'API Integration'}
                 {view === 'settings' && 'System Settings'}
              </h1>
-             <p className="text-slate-400">
-                {view === 'dashboard' && 'Manage your cat wallpapers and videos.'}
-                {view === 'upload' && 'Add or update assets for your Android application.'}
-                {view === 'ai-generator' && 'Generate high-quality 9:16 wallpapers or videos.'}
-                {view === 'api-preview' && 'Preview the JSON data structure for your app.'}
-                {view === 'settings' && 'Configure API keys and system preferences.'}
+             <p className="text-slate-400 flex items-center gap-2">
+                <span className="bg-purple-500/10 text-purple-400 px-2 py-0.5 rounded text-xs font-bold border border-purple-500/20">{activeApp.name}</span>
+                <span>
+                    {view === 'dashboard' && 'Manage your wallpapers and videos.'}
+                    {view === 'upload' && 'Add or update assets.'}
+                    {view === 'ai-generator' && 'Generate high-quality 9:16 wallpapers.'}
+                    {view === 'api-preview' && 'Preview the JSON data structure.'}
+                    {view === 'settings' && 'Configure apps and keys.'}
+                </span>
              </p>
           </div>
 
