@@ -10,6 +10,8 @@ import SettingsView from './components/SettingsView';
 import { AppState, MediaItem, MediaType, AppProfile } from './types';
 import { Key, ExternalLink, ArrowRight, Loader2 } from 'lucide-react';
 import { getApiKey } from './services/geminiService';
+import { getAllMediaItems, saveMediaItem, deleteMediaItem } from './utils/storageDB';
+import { generateUUID } from './utils/mediaUtils';
 
 const INITIAL_CAT_APP_ID = 'app_cat_default';
 
@@ -23,38 +25,15 @@ const DEFAULT_APPS: AppProfile[] = [
   }
 ];
 
-// Mock data to start with if empty, now with appId
-const INITIAL_DATA: MediaItem[] = [
-  {
-    id: '1',
-    appId: INITIAL_CAT_APP_ID,
-    type: MediaType.IMAGE,
-    url: 'https://picsum.photos/id/40/300/500', 
-    title: 'Curious Tabby',
-    description: 'A cute tabby cat looking at the camera with big eyes.',
-    tags: ['cute', 'tabby', 'eyes'],
-    createdAt: Date.now()
-  },
-  {
-    id: '2',
-    appId: INITIAL_CAT_APP_ID,
-    type: MediaType.IMAGE,
-    url: 'https://picsum.photos/id/219/300/500', 
-    title: 'Lion in the Grass',
-    description: 'Majestic wild cat resting in the savannah.',
-    tags: ['wild', 'lion', 'nature'],
-    createdAt: Date.now() - 10000
-  }
-];
-
 const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [hasApiKey, setHasApiKey] = useState<boolean>(false);
   const [checkingKey, setCheckingKey] = useState<boolean>(false);
+  const [isLoadingData, setIsLoadingData] = useState<boolean>(true);
 
   const [view, setView] = useState<AppState['view']>('dashboard');
   
-  // App Management State
+  // App Management State (Small data, can stay in LocalStorage)
   const [apps, setApps] = useState<AppProfile[]>(() => {
     const savedApps = localStorage.getItem('purrfect_apps');
     return savedApps ? JSON.parse(savedApps) : DEFAULT_APPS;
@@ -65,16 +44,8 @@ const App: React.FC = () => {
     return savedActive && apps.find(a => a.id === savedActive) ? savedActive : apps[0].id;
   });
 
-  const [items, setItems] = useState<MediaItem[]>(() => {
-    const saved = localStorage.getItem('purrfect_items');
-    let loadedItems = saved ? JSON.parse(saved) : INITIAL_DATA;
-    
-    // Migration: If existing items don't have appId, assign them to the first app
-    if (loadedItems.length > 0 && !loadedItems[0].appId) {
-        loadedItems = loadedItems.map((item: any) => ({ ...item, appId: apps[0].id }));
-    }
-    return loadedItems;
-  });
+  // Items State (Now loaded from IndexedDB)
+  const [items, setItems] = useState<MediaItem[]>([]);
 
   // State for editing
   const [editingItem, setEditingItem] = useState<MediaItem | null>(null);
@@ -89,6 +60,31 @@ const App: React.FC = () => {
     }
   }, []);
 
+  // Load items from IndexedDB on mount
+  useEffect(() => {
+    const loadItems = async () => {
+        setIsLoadingData(true);
+        try {
+            const dbItems = await getAllMediaItems();
+            
+            // Migration for old items without appId if any
+            const processedItems = dbItems.map((item: any) => {
+                if (!item.appId) {
+                    return { ...item, appId: apps[0].id };
+                }
+                return item;
+            });
+            
+            setItems(processedItems);
+        } catch (error) {
+            console.error("Failed to load items from DB:", error);
+        } finally {
+            setIsLoadingData(false);
+        }
+    };
+    loadItems();
+  }, []); // Run once on mount
+
   // Whenever authentication becomes true, check for the API key
   useEffect(() => {
     if (isAuthenticated) {
@@ -96,11 +92,7 @@ const App: React.FC = () => {
     }
   }, [isAuthenticated]);
 
-  // Persist State
-  useEffect(() => {
-    localStorage.setItem('purrfect_items', JSON.stringify(items));
-  }, [items]);
-
+  // Persist App Settings (Small data)
   useEffect(() => {
     localStorage.setItem('purrfect_apps', JSON.stringify(apps));
   }, [apps]);
@@ -179,45 +171,81 @@ const App: React.FC = () => {
         alert("En az bir uygulama kalmalıdır.");
         return;
     }
-    // Filter out items belonging to this app
-    const newItems = items.filter(i => i.appId !== appId);
-    setItems(newItems);
-
-    const newApps = apps.filter(a => a.id !== appId);
-    setApps(newApps);
     
-    if (activeAppId === appId) {
-        setActiveAppId(newApps[0].id);
+    if (confirm("Bu işlem bu uygulamaya bağlı tüm içerikleri silecektir. Onaylıyor musunuz?")) {
+        // Delete items from DB
+        const itemsToDelete = items.filter(i => i.appId === appId);
+        itemsToDelete.forEach(item => deleteMediaItem(item.id));
+
+        // Update State
+        const newItems = items.filter(i => i.appId !== appId);
+        setItems(newItems);
+
+        const newApps = apps.filter(a => a.id !== appId);
+        setApps(newApps);
+        
+        if (activeAppId === appId) {
+            setActiveAppId(newApps[0].id);
+        }
     }
   };
 
-  const handleSaveItem = (itemData: Omit<MediaItem, 'id' | 'createdAt'>, existingId?: string) => {
-    if (existingId) {
-        // Edit Mode
-        setItems(prev => prev.map(item => 
-            item.id === existingId 
-            ? { ...item, ...itemData } // Keep original ID and createdAt, update other fields
-            : item
-        ));
-    } else {
-        // Create Mode
-        const newItem: MediaItem = {
-            ...itemData,
-            id: crypto.randomUUID(),
-            createdAt: Date.now()
-        };
-        setItems(prev => [newItem, ...prev]);
-    }
-    
-    setEditingItem(null);
-    if (view === 'upload') {
-        setView('dashboard');
+  const handleSaveItem = async (itemData: Omit<MediaItem, 'id' | 'createdAt'>, existingId?: string) => {
+    try {
+        let savedItem: MediaItem;
+        
+        if (existingId) {
+            // Edit Mode - Find original to preserve creation date
+            const original = items.find(i => i.id === existingId);
+            savedItem = {
+                ...itemData,
+                id: existingId,
+                createdAt: original ? original.createdAt : Date.now()
+            };
+            
+            // Save to DB
+            await saveMediaItem(savedItem);
+            
+            // Update State
+            setItems(prev => prev.map(item => 
+                item.id === existingId ? savedItem : item
+            ));
+        } else {
+            // Create Mode
+            savedItem = {
+                ...itemData,
+                id: generateUUID(),
+                createdAt: Date.now()
+            };
+            
+            // Save to DB
+            await saveMediaItem(savedItem);
+            
+            // Update State
+            setItems(prev => [savedItem, ...prev]);
+        }
+        
+        setEditingItem(null);
+        if (view === 'upload') {
+            setView('dashboard');
+        }
+        return true; // Signal success
+    } catch (error) {
+        console.error("Error saving item:", error);
+        alert("Kayıt sırasında hata oluştu. Hafıza dolu olabilir veya veritabanı hatası.");
+        return false;
     }
   };
 
-  const handleDeleteItem = (id: string) => {
+  const handleDeleteItem = async (id: string) => {
     if (confirm('Bu içeriği silmek istediğinize emin misiniz?')) {
-      setItems(prev => prev.filter(i => i.id !== id));
+      try {
+          await deleteMediaItem(id);
+          setItems(prev => prev.filter(i => i.id !== id));
+      } catch (error) {
+          console.error("Error deleting item:", error);
+          alert("Silme işlemi başarısız oldu.");
+      }
     }
   };
 
@@ -232,6 +260,15 @@ const App: React.FC = () => {
   };
 
   const renderContent = () => {
+    if (isLoadingData) {
+        return (
+            <div className="flex flex-col items-center justify-center h-64 text-slate-400">
+                <Loader2 className="w-8 h-8 animate-spin mb-2 text-purple-500" />
+                <p>Veriler Yükleniyor...</p>
+            </div>
+        );
+    }
+
     switch (view) {
       case 'dashboard':
         return <Dashboard 

@@ -5,7 +5,7 @@ import { generateWallpaper, generateMediaMetadata, generateVideoWallpaper, gener
 import { MediaType, MediaItem, AiMetadataResponse, AppProfile } from '../types';
 
 interface AiGeneratorProps {
-  onSave: (item: Omit<MediaItem, 'id' | 'createdAt'>) => void;
+  onSave: (item: Omit<MediaItem, 'id' | 'createdAt'>) => Promise<boolean | void>;
   activeApp: AppProfile;
 }
 
@@ -93,9 +93,8 @@ const AiGenerator: React.FC<AiGeneratorProps> = ({ onSave, activeApp }) => {
     if (!generatedMediaUrl || !metadata) return;
     setSaving(true);
     
-    // Simulate a small delay for better UX
-    setTimeout(() => {
-        onSave({
+    try {
+        await onSave({
             appId: activeApp.id, // Important: Save to current app
             type: activeTab === 'image' ? MediaType.IMAGE : MediaType.VIDEO,
             url: generatedMediaUrl,
@@ -103,13 +102,17 @@ const AiGenerator: React.FC<AiGeneratorProps> = ({ onSave, activeApp }) => {
             description: metadata.description,
             tags: metadata.tags
         });
-        setSaving(false);
+        
         alert(`${activeApp.name} galerisine başarıyla eklendi!`);
         // Reset after save
         setGeneratedMediaUrl(null);
         setMetadata(null);
         setPrompt('');
-    }, 600);
+    } catch (error) {
+        console.error("Save failed", error);
+    } finally {
+        setSaving(false);
+    }
   };
 
   const handleDownloadMedia = () => {
