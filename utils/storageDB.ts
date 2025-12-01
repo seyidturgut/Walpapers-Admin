@@ -1,81 +1,97 @@
-
 import { MediaItem } from '../types';
+import { getSupabaseClient } from '../services/supabaseClient';
 
-const DB_NAME = 'PurrfectAdminDB';
-const STORE_NAME = 'media_items';
-const DB_VERSION = 1;
+const TABLE_NAME = 'media_items';
+
+// Helpers to map between DB snake_case and App camelCase
+const mapToAppModel = (dbItem: any): MediaItem => ({
+  id: dbItem.id,
+  appId: dbItem.app_id,
+  type: dbItem.type,
+  url: dbItem.url,
+  thumbnailUrl: dbItem.thumbnail_url,
+  title: dbItem.title || '',
+  description: dbItem.description || '',
+  tags: dbItem.tags || [],
+  createdAt: dbItem.created_at ? Number(dbItem.created_at) : Date.now(),
+  width: dbItem.width,
+  height: dbItem.height
+});
+
+const mapToDbModel = (item: MediaItem): any => ({
+  id: item.id,
+  app_id: item.appId,
+  type: item.type,
+  url: item.url,
+  thumbnail_url: item.thumbnailUrl,
+  title: item.title,
+  description: item.description,
+  tags: item.tags,
+  created_at: item.createdAt,
+  width: item.width,
+  height: item.height
+});
 
 /**
- * Initializes the IndexedDB database.
- */
-export const initDB = (): Promise<IDBDatabase> => {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
-
-    request.onerror = () => {
-        console.error("IndexedDB error:", request.error);
-        reject(request.error);
-    };
-
-    request.onsuccess = () => {
-        resolve(request.result);
-    };
-
-    request.onupgradeneeded = (event) => {
-      const db = (event.target as IDBOpenDBRequest).result;
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        db.createObjectStore(STORE_NAME, { keyPath: 'id' });
-      }
-    };
-  });
-};
-
-/**
- * Retrieves all media items from the database.
+ * Retrieves all media items from Supabase.
  */
 export const getAllMediaItems = async (): Promise<MediaItem[]> => {
-  try {
-    const db = await initDB();
-    return new Promise((resolve, reject) => {
-      const transaction = db.transaction(STORE_NAME, 'readonly');
-      const store = transaction.objectStore(STORE_NAME);
-      const request = store.getAll();
-
-      request.onsuccess = () => resolve(request.result || []);
-      request.onerror = () => reject(request.error);
-    });
-  } catch (error) {
-    console.error("Failed to get items:", error);
+  const supabase = getSupabaseClient();
+  if (!supabase) {
+    console.warn("Supabase not configured. Returning empty list.");
     return [];
   }
+
+  const { data, error } = await supabase
+    .from(TABLE_NAME)
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error("Supabase fetch error:", error);
+    throw error;
+  }
+
+  return (data || []).map(mapToAppModel);
 };
 
 /**
- * Saves or updates a media item in the database.
+ * Saves or updates a media item in Supabase.
  */
 export const saveMediaItem = async (item: MediaItem): Promise<void> => {
-  const db = await initDB();
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(STORE_NAME, 'readwrite');
-    const store = transaction.objectStore(STORE_NAME);
-    const request = store.put(item);
+  const supabase = getSupabaseClient();
+  if (!supabase) {
+    throw new Error("Supabase is not configured. Please check Settings.");
+  }
 
-    request.onsuccess = () => resolve();
-    request.onerror = () => reject(request.error);
-  });
+  const dbItem = mapToDbModel(item);
+
+  const { error } = await supabase
+    .from(TABLE_NAME)
+    .upsert(dbItem);
+
+  if (error) {
+    console.error("Supabase save error:", error);
+    throw error;
+  }
 };
 
 /**
  * Deletes a media item by ID.
  */
 export const deleteMediaItem = async (id: string): Promise<void> => {
-  const db = await initDB();
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(STORE_NAME, 'readwrite');
-    const store = transaction.objectStore(STORE_NAME);
-    const request = store.delete(id);
+  const supabase = getSupabaseClient();
+  if (!supabase) {
+    throw new Error("Supabase is not configured.");
+  }
 
-    request.onsuccess = () => resolve();
-    request.onerror = () => reject(request.error);
-  });
+  const { error } = await supabase
+    .from(TABLE_NAME)
+    .delete()
+    .eq('id', id);
+
+  if (error) {
+    console.error("Supabase delete error:", error);
+    throw error;
+  }
 };

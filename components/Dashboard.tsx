@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { MediaItem, MediaType, AppProfile } from '../types';
 import { Trash2, Film, Image as ImageIcon, Search, Pencil, Plus } from 'lucide-react';
@@ -20,7 +19,7 @@ const Dashboard: React.FC<DashboardProps> = ({ items, activeApp, onDelete, onEdi
   // 2. Filter by Search Query
   const filteredItems = appItems.filter(item => 
     item.title.toLowerCase().includes(filter.toLowerCase()) ||
-    item.tags.some(tag => tag.toLowerCase().includes(filter.toLowerCase()))
+    (item.tags || []).some(tag => tag.toLowerCase().includes(filter.toLowerCase()))
   );
 
   return (
@@ -108,12 +107,12 @@ const Dashboard: React.FC<DashboardProps> = ({ items, activeApp, onDelete, onEdi
                         <h4 className="font-bold text-white mb-1 truncate">{item.title}</h4>
                         <p className="text-xs text-slate-400 mb-3 truncate">{item.description}</p>
                         <div className="flex flex-wrap gap-1">
-                            {item.tags.slice(0, 3).map((tag, idx) => (
+                            {(item.tags || []).slice(0, 3).map((tag, idx) => (
                                 <span key={idx} className="px-2 py-0.5 bg-slate-700 text-slate-300 text-[10px] rounded-full">
                                     #{tag}
                                 </span>
                             ))}
-                            {item.tags.length > 3 && (
+                            {(item.tags || []).length > 3 && (
                                 <span className="px-2 py-0.5 bg-slate-700 text-slate-300 text-[10px] rounded-full">+{item.tags.length - 3}</span>
                             )}
                         </div>
