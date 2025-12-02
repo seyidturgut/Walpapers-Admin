@@ -12,6 +12,7 @@ import { Key, ExternalLink, ArrowRight, Loader2 } from 'lucide-react';
 import { getApiKey } from './services/geminiService';
 import { getAllMediaItems, saveMediaItem, deleteMediaItem } from './utils/storageDB';
 import { generateUUID } from './utils/mediaUtils';
+import { getSupabaseSession, logoutFromSupabase } from './services/supabaseClient';
 
 const INITIAL_CAT_APP_ID = 'app_cat_default';
 
@@ -44,7 +45,7 @@ const App: React.FC = () => {
     return savedActive && apps.find(a => a.id === savedActive) ? savedActive : apps[0].id;
   });
 
-  // Items State (Now loaded from IndexedDB)
+  // Items State (Now loaded from IndexedDB/Supabase)
   const [items, setItems] = useState<MediaItem[]>([]);
 
   // State for editing
@@ -52,16 +53,30 @@ const App: React.FC = () => {
 
   const activeApp = apps.find(a => a.id === activeAppId) || apps[0];
 
-  // Check for existing session
+  // Check for existing session (Local or Supabase)
   useEffect(() => {
-    const sessionAuth = sessionStorage.getItem('purrfect_auth');
-    if (sessionAuth === 'true') {
-      setIsAuthenticated(true);
-    }
+    const checkAuth = async () => {
+        // 1. Check Local Simple Auth
+        const sessionAuth = sessionStorage.getItem('purrfect_auth');
+        if (sessionAuth === 'true') {
+            setIsAuthenticated(true);
+            return;
+        }
+
+        // 2. Check Supabase Session
+        const supabaseSession = await getSupabaseSession();
+        if (supabaseSession) {
+            setIsAuthenticated(true);
+        }
+    };
+    
+    checkAuth();
   }, []);
 
-  // Load items from IndexedDB on mount
+  // Load items from DB on mount
   useEffect(() => {
+    if (!isAuthenticated) return;
+
     const loadItems = async () => {
         setIsLoadingData(true);
         try {
@@ -83,7 +98,7 @@ const App: React.FC = () => {
         }
     };
     loadItems();
-  }, []); // Run once on mount
+  }, [isAuthenticated, activeAppId]); // Reload if app changes or auth success
 
   // Whenever authentication becomes true, check for the API key
   useEffect(() => {
@@ -151,12 +166,13 @@ const App: React.FC = () => {
   };
 
   const handleLogin = () => {
-    sessionStorage.setItem('purrfect_auth', 'true');
+    // Session setting is handled in LoginScreen or Supabase client for persistence
     setIsAuthenticated(true);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     sessionStorage.removeItem('purrfect_auth');
+    await logoutFromSupabase();
     setIsAuthenticated(false);
     setHasApiKey(false);
   };
@@ -232,7 +248,7 @@ const App: React.FC = () => {
         return true; // Signal success
     } catch (error) {
         console.error("Error saving item:", error);
-        alert("Kayıt sırasında hata oluştu. Hafıza dolu olabilir veya veritabanı hatası.");
+        // Alert is already handled in saveMediaItem
         return false;
     }
   };

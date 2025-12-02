@@ -28,7 +28,12 @@ export const getSupabaseClient = (): SupabaseClient | null => {
 
   if (url && key) {
     try {
-      supabaseInstance = createClient(url, key);
+      supabaseInstance = createClient(url, key, {
+        auth: {
+            persistSession: true, // Oturumu tarayıcıda sakla
+            autoRefreshToken: true,
+        }
+      });
       return supabaseInstance;
     } catch (e) {
       console.error("Failed to initialize Supabase client:", e);
@@ -42,6 +47,43 @@ export const isSupabaseConfigured = (): boolean => {
   const { url, key } = getSupabaseConfig();
   return !!url && !!key;
 };
+
+/**
+ * Sign in with Email and Password using Supabase Auth.
+ */
+export const loginWithSupabase = async (email: string, password: string) => {
+    const supabase = getSupabaseClient();
+    if (!supabase) throw new Error("Supabase bağlantısı yapılandırılmamış.");
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password
+    });
+
+    if (error) throw error;
+    return data;
+};
+
+/**
+ * Sign out from Supabase.
+ */
+export const logoutFromSupabase = async () => {
+    const supabase = getSupabaseClient();
+    if (supabase) {
+        await supabase.auth.signOut();
+    }
+};
+
+/**
+ * Check for existing session.
+ */
+export const getSupabaseSession = async () => {
+    const supabase = getSupabaseClient();
+    if (!supabase) return null;
+    const { data } = await supabase.auth.getSession();
+    return data.session;
+};
+
 
 /**
  * Uploads a Base64 string as a file to Supabase Storage and returns the public URL.

@@ -1,47 +1,62 @@
 
 import React, { useState } from 'react';
-import { Cat, Lock, ArrowRight, Eye, EyeOff, ShieldCheck, AlertTriangle } from 'lucide-react';
+import { Cat, Lock, ArrowRight, Eye, EyeOff, ShieldCheck, AlertTriangle, Mail } from 'lucide-react';
 import { CREDENTIALS } from '../config/credentials';
+import { loginWithSupabase } from '../services/supabaseClient';
 
 interface LoginScreenProps {
   onLogin: () => void;
 }
 
 const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
 
-    // UX için ufak bir bekleme süresi
-    setTimeout(() => {
-      try {
-        const cleanInput = password.trim();
+    const cleanPassword = password.trim();
+    const cleanEmail = email.trim();
 
-        // 1. Adım: Girilen şifreyi ters çevir
-        const reversed = cleanInput.split('').reverse().join('');
-        
-        // 2. Adım: Base64 formatına çevir (window.btoa her tarayıcıda çalışır)
-        const encoded = window.btoa(reversed);
-
-        // 3. Adım: Config dosyasındaki değerle karşılaştır
-        if (encoded === CREDENTIALS.secret) {
-          onLogin();
+    try {
+        if (cleanEmail) {
+            // MODE 1: SUPABASE LOGIN
+            // User provided an email, so we try to authenticate with Supabase
+            // This is required for RLS (Row Level Security) to work properly.
+            await loginWithSupabase(cleanEmail, cleanPassword);
+            // If no error thrown, login successful
+            onLogin();
         } else {
-          setError("Hatalı şifre. Lütfen tekrar deneyiniz.");
-          setLoading(false);
+            // MODE 2: LOCAL ADMIN (FALLBACK)
+            // No email provided, check against local hardcoded hash
+            // UX delay for realism
+            await new Promise(resolve => setTimeout(resolve, 800));
+
+            const reversed = cleanPassword.split('').reverse().join('');
+            const encoded = window.btoa(reversed);
+
+            if (encoded === CREDENTIALS.secret) {
+                onLogin();
+            } else {
+                throw new Error("Hatalı yerel yönetici şifresi.");
+            }
         }
-      } catch (err) {
+    } catch (err: any) {
         console.error(err);
-        setError("Doğrulama sırasında bir hata oluştu.");
+        let msg = "Giriş başarısız.";
+        if (err.message) {
+            if (err.message.includes("Invalid login")) msg = "Hatalı e-posta veya şifre.";
+            else msg = err.message;
+        }
+        setError(msg);
+    } finally {
         setLoading(false);
-      }
-    }, 800);
+    }
   };
 
   return (
@@ -62,9 +77,33 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
             
             <div className="p-8">
                 <form onSubmit={handleSubmit} className="space-y-6">
+                    
+                    {/* Email Input (Optional for Local, Required for Supabase) */}
                     <div>
                         <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 ml-1">
-                            Yönetici Şifresi
+                            E-Posta <span className="text-slate-600 normal-case font-normal">(Supabase kullanıcısı için)</span>
+                        </label>
+                        <div className="relative group">
+                            <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-purple-400 transition-colors">
+                                <Mail className="w-5 h-5" />
+                            </div>
+                            <input 
+                                type="email"
+                                value={email}
+                                onChange={(e) => {
+                                    setEmail(e.target.value);
+                                    setError(null);
+                                }}
+                                className="w-full bg-slate-900 border border-slate-700 rounded-xl py-3.5 pl-10 pr-4 text-white placeholder-slate-600 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all"
+                                placeholder="admin@example.com (Opsiyonel)"
+                            />
+                        </div>
+                    </div>
+
+                    {/* Password Input */}
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 ml-1">
+                            Şifre <span className="text-red-500">*</span>
                         </label>
                         <div className="relative group">
                             <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-purple-400 transition-colors">
@@ -79,7 +118,6 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
                                 }}
                                 className={`w-full bg-slate-900 border ${error ? 'border-red-500' : 'border-slate-700'} rounded-xl py-3.5 pl-10 pr-12 text-white placeholder-slate-600 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all`}
                                 placeholder="Şifrenizi giriniz"
-                                autoFocus
                             />
                             <button 
                                 type="button"

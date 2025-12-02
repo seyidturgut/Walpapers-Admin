@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Key, Save, CheckCircle2, AlertTriangle, Eye, EyeOff, Plus, Trash2, Layers, Cloud, Database } from 'lucide-react';
+import { Key, Save, CheckCircle2, AlertTriangle, Eye, EyeOff, Plus, Trash2, Layers, Cloud, Database, HelpCircle } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 import { AppProfile } from '../types';
 import { getSupabaseConfig } from '../services/supabaseClient';
@@ -183,12 +183,17 @@ const SettingsView: React.FC<SettingsViewProps> = ({ apps, onAddApp, onDeleteApp
                </div>
            </div>
            
-           <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-700 text-xs text-slate-400">
-               <strong>Gereksinimler:</strong>
-               <ul className="list-disc list-inside mt-1 space-y-1">
-                   <li>'media_items' adında bir tablo (SQL Editor'de oluşturun).</li>
-                   <li>'wallpapers' adında Public bir Storage Bucket.</li>
-               </ul>
+           <div className="bg-amber-900/20 p-4 rounded-lg border border-amber-700/50 text-xs text-slate-300">
+               <div className="flex items-center gap-2 mb-2 text-amber-500 font-bold">
+                   <AlertTriangle className="w-4 h-4" />
+                   <span>Kaydetme Hatası Alıyor musunuz?</span>
+               </div>
+               <p className="mb-2">Eğer "row-level security" hatası alıyorsanız, Supabase panelinden şunları yapın:</p>
+               <ol className="list-decimal list-inside space-y-1 ml-2 text-slate-400">
+                   <li><strong>SQL Editor</strong> kısmına gidin.</li>
+                   <li>Şu komutu çalıştırın: <code className="bg-black/50 px-1 rounded text-green-400">ALTER TABLE media_items DISABLE ROW LEVEL SECURITY;</code></li>
+                   <li>Ayrıca Storage kısmında "wallpapers" bucket'ının Public olduğundan emin olun.</li>
+               </ol>
            </div>
 
            <div className="flex justify-end">

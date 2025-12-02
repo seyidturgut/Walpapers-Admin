@@ -110,9 +110,13 @@ export const saveMediaItem = async (item: MediaItem): Promise<void> => {
 
             if (error) throw error;
             return; // Success
-        } catch (err) {
+        } catch (err: any) {
             console.error("Supabase Save Failed:", err);
-            alert("Bulut kaydı başarısız oldu, yerel veritabanı deneniyor...");
+            const errMsg = err.message || JSON.stringify(err);
+            
+            // Show detailed error to help user fix RLS issues
+            alert(`Bulut kaydı başarısız oldu (Supabase Hatası):\n\n${errMsg}\n\nYerel veritabanına kaydediliyor...`);
+            
             // Fallthrough to IndexedDB on error
         }
     }
