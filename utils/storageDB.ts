@@ -1,97 +1,93 @@
 import { MediaItem } from '../types';
-import { getSupabaseClient } from '../services/supabaseClient';
 
-const TABLE_NAME = 'media_items';
-
-// Helpers to map between DB snake_case and App camelCase
-const mapToAppModel = (dbItem: any): MediaItem => ({
-  id: dbItem.id,
-  appId: dbItem.app_id,
-  type: dbItem.type,
-  url: dbItem.url,
-  thumbnailUrl: dbItem.thumbnail_url,
-  title: dbItem.title || '',
-  description: dbItem.description || '',
-  tags: dbItem.tags || [],
-  createdAt: dbItem.created_at ? Number(dbItem.created_at) : Date.now(),
-  width: dbItem.width,
-  height: dbItem.height
-});
-
-const mapToDbModel = (item: MediaItem): any => ({
-  id: item.id,
-  app_id: item.appId,
-  type: item.type,
-  url: item.url,
-  thumbnail_url: item.thumbnailUrl,
-  title: item.title,
-  description: item.description,
-  tags: item.tags,
-  created_at: item.createdAt,
-  width: item.width,
-  height: item.height
-});
+const DB_NAME = 'PurrfectDB';
+const DB_VERSION = 1;
+const STORE_NAME = 'media_items';
 
 /**
- * Retrieves all media items from Supabase.
+ * Opens the IndexedDB database.
  */
-export const getAllMediaItems = async (): Promise<MediaItem[]> => {
-  const supabase = getSupabaseClient();
-  if (!supabase) {
-    console.warn("Supabase not configured. Returning empty list.");
-    return [];
-  }
+const openDB = (): Promise<IDBDatabase> => {
+  return new Promise((resolve, reject) => {
+    // Check if IndexedDB is supported
+    if (!window.indexedDB) {
+      reject("Your browser doesn't support IndexedDB.");
+      return;
+    }
 
-  const { data, error } = await supabase
-    .from(TABLE_NAME)
-    .select('*')
-    .order('created_at', { ascending: false });
+    const request = indexedDB.open(DB_NAME, DB_VERSION);
 
-  if (error) {
-    console.error("Supabase fetch error:", error);
-    throw error;
-  }
+    request.onerror = (event) => {
+      console.error("IndexedDB error:", (event.target as any).error);
+      reject("Database error: " + (event.target as any).error);
+    };
 
-  return (data || []).map(mapToAppModel);
+    request.onsuccess = (event) => {
+      resolve((event.target as IDBOpenDBRequest).result);
+    };
+
+    request.onupgradeneeded = (event) => {
+      const db = (event.target as IDBOpenDBRequest).result;
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        // Create object store with 'id' as the key path
+        db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+      }
+    };
+  });
 };
 
 /**
- * Saves or updates a media item in Supabase.
+ * Retrieves all media items from IndexedDB.
+ */
+export const getAllMediaItems = async (): Promise<MediaItem[]> => {
+  try {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(STORE_NAME, 'readonly');
+      const store = transaction.objectStore(STORE_NAME);
+      const request = store.getAll();
+
+      request.onsuccess = () => {
+        // Sort explicitly in JS because basic IndexedDB getAll doesn't sort by createdAt easily without an index
+        const items = (request.result || []) as MediaItem[];
+        items.sort((a, b) => b.createdAt - a.createdAt); // Newest first
+        resolve(items);
+      };
+
+      request.onerror = () => reject(request.error);
+    });
+  } catch (error) {
+    console.error("Error getting items:", error);
+    return [];
+  }
+};
+
+/**
+ * Saves or updates a media item in IndexedDB.
  */
 export const saveMediaItem = async (item: MediaItem): Promise<void> => {
-  const supabase = getSupabaseClient();
-  if (!supabase) {
-    throw new Error("Supabase is not configured. Please check Settings.");
-  }
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(STORE_NAME, 'readwrite');
+    const store = transaction.objectStore(STORE_NAME);
+    const request = store.put(item); // 'put' acts as upsert (insert or update)
 
-  const dbItem = mapToDbModel(item);
-
-  const { error } = await supabase
-    .from(TABLE_NAME)
-    .upsert(dbItem);
-
-  if (error) {
-    console.error("Supabase save error:", error);
-    throw error;
-  }
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+  });
 };
 
 /**
  * Deletes a media item by ID.
  */
 export const deleteMediaItem = async (id: string): Promise<void> => {
-  const supabase = getSupabaseClient();
-  if (!supabase) {
-    throw new Error("Supabase is not configured.");
-  }
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(STORE_NAME, 'readwrite');
+    const store = transaction.objectStore(STORE_NAME);
+    const request = store.delete(id);
 
-  const { error } = await supabase
-    .from(TABLE_NAME)
-    .delete()
-    .eq('id', id);
-
-  if (error) {
-    console.error("Supabase delete error:", error);
-    throw error;
-  }
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+  });
 };

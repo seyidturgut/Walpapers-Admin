@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Key, Save, CheckCircle2, Shield, AlertTriangle, Eye, EyeOff, Plus, Trash2, Layers, Database, Cloud } from 'lucide-react';
+import { Key, Save, CheckCircle2, AlertTriangle, Eye, EyeOff, Plus, Trash2, Layers } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 import { AppProfile } from '../types';
-import { getSupabaseClient } from '../services/supabaseClient';
 
 interface SettingsViewProps {
   apps: AppProfile[];
@@ -17,12 +16,6 @@ const SettingsView: React.FC<SettingsViewProps> = ({ apps, onAddApp, onDeleteApp
   const [geminiSaved, setGeminiSaved] = useState(false);
   const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
 
-  // Supabase State
-  const [sbUrl, setSbUrl] = useState('');
-  const [sbKey, setSbKey] = useState('');
-  const [sbSaved, setSbSaved] = useState(false);
-  const [sbTestStatus, setSbTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
-
   // App Creation State
   const [newAppName, setNewAppName] = useState('');
   const [newAppDesc, setNewAppDesc] = useState('');
@@ -32,12 +25,6 @@ const SettingsView: React.FC<SettingsViewProps> = ({ apps, onAddApp, onDeleteApp
     // Load Gemini Key
     const storedKey = localStorage.getItem('gemini_api_key');
     if (storedKey) setApiKey(storedKey);
-
-    // Load Supabase Config
-    const storedSbUrl = localStorage.getItem('supabase_url');
-    const storedSbKey = localStorage.getItem('supabase_key');
-    if (storedSbUrl) setSbUrl(storedSbUrl);
-    if (storedSbKey) setSbKey(storedSbKey);
   }, []);
 
   // --- GEMINI HANDLERS ---
@@ -69,68 +56,12 @@ const SettingsView: React.FC<SettingsViewProps> = ({ apps, onAddApp, onDeleteApp
     }
   };
 
-  // --- SUPABASE HANDLERS ---
-  const handleSaveSupabase = () => {
-    if (sbUrl.trim() && sbKey.trim()) {
-      localStorage.setItem('supabase_url', sbUrl.trim());
-      localStorage.setItem('supabase_key', sbKey.trim());
-      
-      // Force reload/re-init logic could go here, but reload page is safer for now or just calling getSupabaseClient()
-      setSbSaved(true);
-      setTimeout(() => setSbSaved(false), 3000);
-      handleTestSupabase();
-    } else {
-      localStorage.removeItem('supabase_url');
-      localStorage.removeItem('supabase_key');
-      setSbSaved(true);
-      setTimeout(() => setSbSaved(false), 3000);
-    }
-  };
-
-  const handleTestSupabase = async () => {
-    setSbTestStatus('testing');
-    // We need to reload the client since it's a singleton initialized with old values potentially
-    // For this simple implementation, we assume getSupabaseClient checks storage if instance is null,
-    // but if it's already instantiated, we might need to refresh. 
-    // Simplest way for user: Alert them to refresh page or try a fetch.
-    
-    // Let's try to construct a temp client or just use the updated storage values by forcing a reload of the app
-    // Actually, let's just use the current values to fetch:
-    try {
-        // Quick fetch to see if connection works
-        const { createClient } = await import('@supabase/supabase-js');
-        const tempClient = createClient(sbUrl, sbKey);
-        const { error } = await tempClient.from('media_items').select('count', { count: 'exact', head: true });
-        
-        if (error && error.code !== 'PGRST116') { // PGRST116 is just no rows, which is fine
-           console.error(error);
-           // If table doesn't exist, it might error, but connection is likely okay if not 401
-           if (error.code === '42P01') {
-             alert("Bağlantı başarılı ama 'media_items' tablosu bulunamadı. Lütfen SQL kurulumunu yapın.");
-             setSbTestStatus('success');
-           } else {
-             throw error;
-           }
-        } else {
-           setSbTestStatus('success');
-           // Reload to apply changes globally
-           if(confirm("Bağlantı başarılı! Değişikliklerin uygulanması için sayfa yenilensin mi?")) {
-             window.location.reload();
-           }
-        }
-    } catch (error) {
-        console.error(error);
-        setSbTestStatus('error');
-    }
-  };
-
-
   // --- APP HANDLERS ---
   const handleCreateApp = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newAppName || !newAppDesc) return;
 
-    // Use a simpler ID generation if crypto is missing in some envs (though polyfilled in util)
+    // Generate ID
     const newApp: AppProfile = {
         id: `app_${Date.now()}_${Math.floor(Math.random()*1000)}`,
         name: newAppName,
@@ -201,78 +132,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ apps, onAddApp, onDeleteApp
         </div>
       </div>
 
-      {/* 2. Database Configuration (Supabase) */}
-      <div className="bg-slate-800 rounded-2xl border border-slate-700 shadow-xl overflow-hidden">
-        <div className="p-6 border-b border-slate-700 bg-slate-900/50 flex items-center gap-3">
-          <div className="bg-green-500/10 p-2 rounded-lg">
-             <Database className="w-6 h-6 text-green-400" />
-          </div>
-          <div>
-            <h2 className="text-xl font-bold text-white">Veritabanı Ayarları (Supabase)</h2>
-            <p className="text-sm text-slate-400">Bulut veritabanı bağlantısı (n8n otomasyonu ve kalıcı depolama için).</p>
-          </div>
-        </div>
-
-        <div className="p-8 space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">Project URL</label>
-                <input 
-                    type="text" 
-                    value={sbUrl}
-                    onChange={(e) => setSbUrl(e.target.value)}
-                    placeholder="https://xyz.supabase.co"
-                    className="w-full bg-slate-900 border border-slate-700 rounded-xl py-3 px-4 text-white placeholder-slate-600 focus:outline-none focus:border-green-500 transition-all font-mono text-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">Anon API Key</label>
-                <input 
-                    type="password"
-                    value={sbKey}
-                    onChange={(e) => setSbKey(e.target.value)}
-                    placeholder="eyJh..."
-                    className="w-full bg-slate-900 border border-slate-700 rounded-xl py-3 px-4 text-white placeholder-slate-600 focus:outline-none focus:border-green-500 transition-all font-mono text-sm"
-                />
-              </div>
-          </div>
-
-          <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-700/50 text-xs text-slate-400 leading-relaxed">
-             <strong className="text-slate-300">Kurulum Notu:</strong> Supabase projenizde SQL Editor'e gidip aşağıdaki tabloyu oluşturmalısınız:
-             <pre className="mt-2 bg-slate-950 p-2 rounded border border-slate-800 text-green-300 overflow-x-auto">
-{`create table media_items (
-  id text primary key,
-  app_id text not null,
-  type text not null,
-  url text not null,
-  title text,
-  description text,
-  tags text[],
-  created_at bigint,
-  thumbnail_url text
-);`}
-             </pre>
-          </div>
-
-          <div className="flex items-center justify-between pt-4 border-t border-slate-700">
-             <div className="flex items-center gap-2">
-                {sbTestStatus === 'testing' && <span className="text-slate-400 text-sm flex items-center gap-2"><div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"/> Sunucuya bağlanılıyor...</span>}
-                {sbTestStatus === 'success' && <span className="text-green-400 text-sm flex items-center gap-2"><Cloud className="w-4 h-4"/> Supabase Bağlı</span>}
-                {sbTestStatus === 'error' && <span className="text-red-400 text-sm flex items-center gap-2"><AlertTriangle className="w-4 h-4"/> Bağlantı Hatası</span>}
-             </div>
-
-             <button 
-                onClick={handleSaveSupabase}
-                className="px-6 py-2.5 bg-green-600 hover:bg-green-500 text-white rounded-lg font-medium shadow-lg shadow-green-900/30 flex items-center gap-2 transition-all"
-             >
-                {sbSaved ? <CheckCircle2 className="w-4 h-4" /> : <Save className="w-4 h-4" />}
-                {sbSaved ? 'Kaydedildi' : 'DB Ayarlarını Kaydet'}
-             </button>
-          </div>
-        </div>
-      </div>
-
-      {/* 3. App Management */}
+      {/* 2. App Management */}
       <div className="bg-slate-800 rounded-2xl border border-slate-700 shadow-xl overflow-hidden">
         <div className="p-6 border-b border-slate-700 bg-slate-900/50 flex items-center gap-3">
           <div className="bg-blue-500/10 p-2 rounded-lg">
