@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Key, Save, CheckCircle2, AlertTriangle, Eye, EyeOff, Plus, Trash2, Layers, Cloud, Database } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 import { AppProfile } from '../types';
-import { isSupabaseConfigured } from '../services/supabaseClient';
+import { getSupabaseConfig } from '../services/supabaseClient';
 
 interface SettingsViewProps {
   apps: AppProfile[];
@@ -32,10 +32,10 @@ const SettingsView: React.FC<SettingsViewProps> = ({ apps, onAddApp, onDeleteApp
     const storedKey = localStorage.getItem('gemini_api_key');
     if (storedKey) setApiKey(storedKey);
 
-    const storedSbUrl = localStorage.getItem('supabase_url');
-    const storedSbKey = localStorage.getItem('supabase_key');
-    if (storedSbUrl) setSbUrl(storedSbUrl);
-    if (storedSbKey) setSbKey(storedSbKey);
+    // Load Supabase config (Defaults or LocalStorage)
+    const { url, key } = getSupabaseConfig();
+    setSbUrl(url);
+    setSbKey(key);
   }, []);
 
   // --- GEMINI HANDLERS ---
@@ -77,7 +77,11 @@ const SettingsView: React.FC<SettingsViewProps> = ({ apps, onAddApp, onDeleteApp
       } else {
           localStorage.removeItem('supabase_url');
           localStorage.removeItem('supabase_key');
-          alert("Supabase bağlantısı kaldırıldı. Sistem yerel moda döndü.");
+          alert("Özel ayarlar silindi, varsayılan değerlere dönülecek.");
+          
+          const { url, key } = getSupabaseConfig();
+          setSbUrl(url);
+          setSbKey(key);
       }
   };
 

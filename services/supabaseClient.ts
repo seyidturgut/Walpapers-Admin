@@ -2,23 +2,45 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { MediaItem } from '../types';
 
+// Default credentials
+const DEFAULT_SUPABASE_URL = "https://wiikltoakhzuhocquvuo.supabase.co";
+const DEFAULT_SUPABASE_KEY = "sb_publishable_zTzJLoe-0mqIIFlo9-p95A_h8fr9H8I";
+
 let supabaseInstance: SupabaseClient | null = null;
+
+/**
+ * Returns the active Supabase configuration (Local Storage > Defaults).
+ */
+export const getSupabaseConfig = () => {
+  const localUrl = localStorage.getItem('supabase_url');
+  const localKey = localStorage.getItem('supabase_key');
+  
+  return {
+    url: localUrl || DEFAULT_SUPABASE_URL,
+    key: localKey || DEFAULT_SUPABASE_KEY
+  };
+};
 
 export const getSupabaseClient = (): SupabaseClient | null => {
   if (supabaseInstance) return supabaseInstance;
 
-  const url = localStorage.getItem('supabase_url');
-  const key = localStorage.getItem('supabase_key');
+  const { url, key } = getSupabaseConfig();
 
   if (url && key) {
-    supabaseInstance = createClient(url, key);
-    return supabaseInstance;
+    try {
+      supabaseInstance = createClient(url, key);
+      return supabaseInstance;
+    } catch (e) {
+      console.error("Failed to initialize Supabase client:", e);
+      return null;
+    }
   }
   return null;
 };
 
 export const isSupabaseConfigured = (): boolean => {
-  return !!localStorage.getItem('supabase_url') && !!localStorage.getItem('supabase_key');
+  const { url, key } = getSupabaseConfig();
+  return !!url && !!key;
 };
 
 /**

@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { MediaItem, MediaType, AppProfile } from '../types';
 import { Copy, Code, Smartphone, Check, Database, AlertTriangle } from 'lucide-react';
-import { isSupabaseConfigured } from '../services/supabaseClient';
+import { isSupabaseConfigured, getSupabaseConfig } from '../services/supabaseClient';
 
 interface ApiPreviewProps {
   items: MediaItem[];
@@ -18,8 +18,9 @@ const ApiPreview: React.FC<ApiPreviewProps> = ({ items, activeApp }) => {
 
   // ANDROID KOTLIN CODE GENERATOR
   const generateAndroidCode = () => {
-    const sbUrl = localStorage.getItem('supabase_url') || "YOUR_SUPABASE_URL_FROM_SETTINGS";
-    const sbKey = localStorage.getItem('supabase_key') || "YOUR_SUPABASE_KEY_FROM_SETTINGS";
+    const { url, key } = getSupabaseConfig();
+    const sbUrl = url;
+    const sbKey = key;
 
     return `
 /* 
