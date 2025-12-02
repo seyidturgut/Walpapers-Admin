@@ -72,6 +72,17 @@ $action = $_GET['action'] ?? '';
 if ($_SERVER['REQUEST_METHOD'] === 'GET' && $action === 'get_all') {
     $stmt = $pdo->query("SELECT * FROM media_items ORDER BY created_at DESC");
     $items = $stmt->fetchAll();
+    
+    // Tags sütununu JSON String'den Array'e çevir (Android'in List olarak okuyabilmesi için)
+    foreach ($items as &$item) {
+        if (!empty($item['tags'])) {
+            $decoded = json_decode($item['tags']);
+            $item['tags'] = is_array($decoded) ? $decoded : [];
+        } else {
+            $item['tags'] = [];
+        }
+    }
+    
     echo json_encode(['status' => 'success', 'items' => $items]);
 }
 
@@ -106,7 +117,7 @@ elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'save') {
         $fileUrl, 
         $_POST['title'], 
         $_POST['description'], 
-        $_POST['tags'], // JSON string olarak gelir
+        $_POST['tags'], // JSON string olarak gelir (örn: "[\"tag1\", \"tag2\"]")
         $_POST['created_at']
     ]);
 
@@ -129,11 +140,19 @@ elseif ($_GET['action'] === 'delete' && isset($_GET['id'])) {
    ---------------------------------------------------------
    ANDROID - RETROFIT IMPLEMENTATION
    ---------------------------------------------------------
+   
+   1. build.gradle (Module: app) dosyasına ekleyin:
+   implementation 'com.squareup.retrofit2:retrofit:2.9.0'
+   implementation 'com.squareup.retrofit2:converter-gson:2.9.0'
+   
+   2. AndroidManifest.xml dosyasına ekleyin:
+   <uses-permission android:name="android.permission.INTERNET" />
 */
 
 import com.google.gson.annotations.SerializedName
+import retrofit2.Retrofit
+import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.GET
-import retrofit2.http.Query
 
 // 1. Data Model
 data class WallpaperResponse(
@@ -147,7 +166,8 @@ data class WallpaperItem(
     val type: String,
     val url: String,
     val title: String,
-    val tags: String // Not: PHP'den string gelebilir, Gson ile List'e çevirmek gerekebilir
+    val description: String,
+    val tags: List<String> // Artık otomatik olarak Liste formatında gelecek
 )
 
 // 2. API Interface
@@ -156,13 +176,27 @@ interface WallpaperApi {
     suspend fun getAllWallpapers(): WallpaperResponse
 }
 
-// 3. Kullanım
+// 3. Kullanım (Repository veya ViewModel içinde)
+// Base URL, api.php dosyasının bulunduğu klasör olmalıdır.
 val retrofit = Retrofit.Builder()
     .baseUrl("${apiUrl.replace('api.php', '')}") 
     .addConverterFactory(GsonConverterFactory.create())
     .build()
 
 val api = retrofit.create(WallpaperApi::class.java)
+
+// Fonksiyon örneği
+suspend fun fetchWallpapers() {
+    try {
+        const response = api.getAllWallpapers()
+        if (response.status == "success") {
+            const list = response.items
+            // RecyclerView adapter'a gönder...
+        }
+    } catch (e: Exception) {
+        e.printStackTrace()
+    }
+}
 `;
   };
 
