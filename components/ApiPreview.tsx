@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { MediaItem, MediaType, AppProfile } from '../types';
-import { Copy, Code, Smartphone, Check, Database } from 'lucide-react';
+import { Copy, Code, Smartphone, Check, Database, AlertTriangle } from 'lucide-react';
 import { isSupabaseConfigured } from '../services/supabaseClient';
 
 interface ApiPreviewProps {
@@ -18,54 +18,129 @@ const ApiPreview: React.FC<ApiPreviewProps> = ({ items, activeApp }) => {
 
   // ANDROID KOTLIN CODE GENERATOR
   const generateAndroidCode = () => {
-    const sbUrl = localStorage.getItem('supabase_url') || "YOUR_SUPABASE_URL";
-    const sbKey = localStorage.getItem('supabase_key') || "YOUR_SUPABASE_ANON_KEY";
+    const sbUrl = localStorage.getItem('supabase_url') || "YOUR_SUPABASE_URL_FROM_SETTINGS";
+    const sbKey = localStorage.getItem('supabase_key') || "YOUR_SUPABASE_KEY_FROM_SETTINGS";
 
     return `
-// 1. Add Dependency (build.gradle.kts)
-// implementation("io.github.jan-tennert.supabase:postgrest-kt:2.5.0")
+/* 
+   ---------------------------------------------------------
+   ADIM 1: build.gradle.kts (Module: app) dosyanıza ekleyin:
+   ---------------------------------------------------------
+   
+   plugins {
+       kotlin("plugin.serialization") version "1.9.0" // Versiyon projenize göre değişebilir
+   }
 
-// 2. Setup Client
-val supabase = createSupabaseClient(
-    supabaseUrl = "${sbUrl}",
-    supabaseKey = "${sbKey}"
-) {
-    install(Postgrest)
-}
+   dependencies {
+       // Supabase
+       implementation("io.github.jan-tennert.supabase:postgrest-kt:2.5.0")
+       implementation("io.ktor:ktor-client-android:2.3.12")
+       
+       // JSON Serialization
+       implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
+       
+       // Resim Yükleme için (Coil önerilir)
+       implementation("io.coil-kt:coil:2.6.0")
+   }
+*/
 
-// 3. Data Model
+import io.github.jan_tennert.supabase.createSupabaseClient
+import io.github.jan_tennert.supabase.postgrest.Postgrest
+import io.github.jan_tennert.supabase.postgrest.from
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+
+// ---------------------------------------------------------
+// ADIM 2: Veri Modeli (Data Class)
+// ---------------------------------------------------------
+
 @Serializable
 data class WallpaperItem(
     val id: String,
-    @SerialName("app_id") val appId: String,
-    val type: String, // 'IMAGE' or 'VIDEO'
-    val url: String,  // Public URL from Supabase Storage
+    
+    @SerialName("app_id") 
+    val appId: String,
+    
+    val type: String, // 'IMAGE' veya 'VIDEO'
+    
+    val url: String,  // Resmin/Videonun doğrudan linki
+    
     val title: String,
-    val description: String,
-    val tags: List<String>
+    
+    val description: String? = null,
+    
+    val tags: List<String> = emptyList(),
+    
+    @SerialName("created_at")
+    val createdAt: Long = 0
 )
 
-// 4. Fetch Function for '${activeApp.name}'
-suspend fun fetchWallpapers(): List<WallpaperItem> {
-    return supabase.from("media_items")
-        .select() {
-            filter {
-                eq("app_id", "${activeApp.id}")
-            }
-            order("created_at", Order.DESCENDING)
+// ---------------------------------------------------------
+// ADIM 3: Veri Çekme Sınıfı (Repository)
+// ---------------------------------------------------------
+
+class WallpaperRepository {
+
+    // İstemciyi başlat
+    private val supabase = createSupabaseClient(
+        supabaseUrl = "${sbUrl}",
+        supabaseKey = "${sbKey}"
+    ) {
+        install(Postgrest)
+    }
+
+    /**
+     * "${activeApp.name}" uygulaması için içerikleri çeker.
+     */
+    suspend fun getWallpapers(): List<WallpaperItem> {
+        return try {
+            supabase.from("media_items")
+                .select {
+                    // Sadece bu uygulamaya ait verileri filtrele
+                    filter {
+                        eq("app_id", "${activeApp.id}")
+                    }
+                    // En yeniden eskiye sırala
+                    order("created_at", order = io.github.jan_tennert.supabase.postgrest.query.Order.DESCENDING)
+                }
+                .decodeList<WallpaperItem>()
+        } catch (e: Exception) {
+            e.printStackTrace()
+            emptyList()
         }
-        .decodeList<WallpaperItem>()
+    }
 }
+
+/*
+   KULLANIM ÖRNEĞİ (ViewModel veya Activity içinde):
+   
+   val repo = WallpaperRepository()
+   scope.launch {
+       val wallpapers = repo.getWallpapers()
+       wallpapers.forEach { item ->
+           println("Başlık: \${item.title}, Link: \${item.url}")
+       }
+   }
+*/
 `.trim();
   };
 
   const generateJson = () => {
     return JSON.stringify({
         source: isCloud ? "Supabase Cloud" : "Local Browser Storage (Not accessible to Android)",
-        warning: isCloud ? "" : "ANDROID ERİŞİMİ İÇİN AYARLARDAN SUPABASE BAĞLAMALISINIZ!",
-        app: activeApp.name,
+        warning: isCloud ? "" : "DİKKAT: Ayarlardan Supabase bağlantısını yapmazsanız Android veriye erişemez.",
+        app_name: activeApp.name,
+        app_id: activeApp.id,
         count: appItems.length,
-        items: appItems
+        items: appItems.map(item => ({
+             id: item.id,
+             app_id: item.appId,
+             type: item.type,
+             url: item.url,
+             title: item.title,
+             tags: item.tags,
+             created_at: item.createdAt
+        }))
     }, null, 2);
   };
 
@@ -83,16 +158,16 @@ suspend fun fetchWallpapers(): List<WallpaperItem> {
         <div className={`p-6 rounded-2xl border shadow-lg shrink-0 ${isCloud ? 'bg-slate-800 border-green-500/30' : 'bg-red-900/20 border-red-500/50'}`}>
             <div className="flex items-start gap-4">
                 <div className={`p-3 rounded-xl ${isCloud ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
-                    <Database className="w-6 h-6" />
+                    {isCloud ? <Database className="w-6 h-6" /> : <AlertTriangle className="w-6 h-6" />}
                 </div>
                 <div>
                     <h2 className="text-xl font-bold text-white mb-1">
-                        {isCloud ? "Android Bağlantısı Hazır" : "Android Bağlantısı Yok"}
+                        {isCloud ? "Bulut Bağlantısı Aktif" : "Bulut Bağlantısı Yok!"}
                     </h2>
                     <p className="text-sm text-slate-300">
                         {isCloud 
-                            ? "Sistem Supabase bulutuna bağlı. Android uygulamanız verileri çekebilir." 
-                            : "Şu an veriler sadece tarayıcıda. Android erişimi için Ayarlar > Supabase kısmını doldurun."}
+                            ? "Sistem Supabase'e bağlı. Aşağıdaki Kotlin kodunu Android projenize yapıştırıp kullanabilirsiniz." 
+                            : "Şu an veriler sadece bu tarayıcıda (Local) kayıtlı. Android uygulamanızın verilere erişebilmesi için 'Settings' kısmından Supabase ayarlarını yapmalısınız."}
                     </p>
                 </div>
             </div>
@@ -105,16 +180,16 @@ suspend fun fetchWallpapers(): List<WallpaperItem> {
                         <Smartphone className="w-4 h-4" /> Android (Kotlin)
                     </button>
                     <button onClick={() => setActiveTab('json')} className={`px-4 py-1.5 rounded-md text-sm font-medium flex items-center gap-2 transition-all ${activeTab === 'json' ? 'bg-blue-600 text-white' : 'text-slate-500 hover:text-slate-300'}`}>
-                        <Code className="w-4 h-4" /> Raw JSON
+                        <Code className="w-4 h-4" /> Raw JSON Preview
                     </button>
                 </div>
 
                 <button onClick={handleCopy} className="flex items-center gap-2 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-sm transition-all">
-                    {copied ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />} {copied ? 'Kopyalandı' : 'Kopyala'}
+                    {copied ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />} {copied ? 'Kopyalandı' : 'Kodu Kopyala'}
                 </button>
             </div>
 
-            <div className="flex-1 overflow-auto relative custom-scrollbar">
+            <div className="flex-1 overflow-auto relative custom-scrollbar bg-[#0d1117]">
                 <pre className="p-6 text-sm font-mono leading-relaxed">
                     <code className={activeTab === 'android' ? "text-green-300" : "text-blue-300"}>
                         {content}
