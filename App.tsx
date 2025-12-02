@@ -12,7 +12,6 @@ import { Key, ExternalLink, ArrowRight, Loader2 } from 'lucide-react';
 import { getApiKey } from './services/geminiService';
 import { getAllMediaItems, saveMediaItem, deleteMediaItem } from './utils/storageDB';
 import { generateUUID } from './utils/mediaUtils';
-import { getSupabaseSession, logoutFromSupabase } from './services/supabaseClient';
 
 const INITIAL_CAT_APP_ID = 'app_cat_default';
 
@@ -45,7 +44,7 @@ const App: React.FC = () => {
     return savedActive && apps.find(a => a.id === savedActive) ? savedActive : apps[0].id;
   });
 
-  // Items State (Now loaded from IndexedDB/Supabase)
+  // Items State (Now loaded from IndexedDB or Custom API)
   const [items, setItems] = useState<MediaItem[]>([]);
 
   // State for editing
@@ -53,19 +52,11 @@ const App: React.FC = () => {
 
   const activeApp = apps.find(a => a.id === activeAppId) || apps[0];
 
-  // Check for existing session (Local or Supabase)
+  // Check for existing session (Local)
   useEffect(() => {
     const checkAuth = async () => {
-        // 1. Check Local Simple Auth
         const sessionAuth = sessionStorage.getItem('purrfect_auth');
         if (sessionAuth === 'true') {
-            setIsAuthenticated(true);
-            return;
-        }
-
-        // 2. Check Supabase Session
-        const supabaseSession = await getSupabaseSession();
-        if (supabaseSession) {
             setIsAuthenticated(true);
         }
     };
@@ -166,13 +157,12 @@ const App: React.FC = () => {
   };
 
   const handleLogin = () => {
-    // Session setting is handled in LoginScreen or Supabase client for persistence
+    sessionStorage.setItem('purrfect_auth', 'true');
     setIsAuthenticated(true);
   };
 
   const handleLogout = async () => {
     sessionStorage.removeItem('purrfect_auth');
-    await logoutFromSupabase();
     setIsAuthenticated(false);
     setHasApiKey(false);
   };
@@ -219,7 +209,7 @@ const App: React.FC = () => {
                 createdAt: original ? original.createdAt : Date.now()
             };
             
-            // Save to DB
+            // Save to DB (or API)
             await saveMediaItem(savedItem);
             
             // Update State
@@ -234,7 +224,7 @@ const App: React.FC = () => {
                 createdAt: Date.now()
             };
             
-            // Save to DB
+            // Save to DB (or API)
             await saveMediaItem(savedItem);
             
             // Update State
@@ -248,7 +238,6 @@ const App: React.FC = () => {
         return true; // Signal success
     } catch (error) {
         console.error("Error saving item:", error);
-        // Alert is already handled in saveMediaItem
         return false;
     }
   };

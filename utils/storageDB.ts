@@ -1,6 +1,5 @@
 
 import { MediaItem } from '../types';
-import { getSupabaseClient, isSupabaseConfigured, uploadFileToSupabase } from '../services/supabaseClient';
 
 // --- INDEXED DB (LOCAL FALLBACK) ---
 const DB_NAME = 'PurrfectDB';
@@ -25,34 +24,41 @@ const openDB = (): Promise<IDBDatabase> => {
   });
 };
 
+// --- API CONFIGURATION ---
+const getApiUrl = () => {
+    return localStorage.getItem('custom_api_url') || '';
+};
+
 // --- UNIFIED API ---
 
 /**
- * Retrieves all media items from Supabase (if connected) OR IndexedDB.
+ * Retrieves all media items from Custom Server API (if configured) OR IndexedDB.
  */
 export const getAllMediaItems = async (): Promise<MediaItem[]> => {
-  // 1. Try Supabase
-  if (isSupabaseConfigured()) {
-    const supabase = getSupabaseClient();
-    if (supabase) {
-      const { data, error } = await supabase
-        .from('media_items')
-        .select('*')
-        .order('created_at', { ascending: false });
-      
-      if (!error && data) {
-        // Map snake_case to camelCase
-        return data.map((item: any) => ({
-          id: item.id,
-          appId: item.app_id,
-          type: item.type,
-          url: item.url,
-          title: item.title,
-          description: item.description,
-          tags: item.tags || [],
-          createdAt: item.created_at
-        }));
-      }
+  const apiUrl = getApiUrl();
+
+  // 1. Try Custom API
+  if (apiUrl) {
+    try {
+        const response = await fetch(`${apiUrl}?action=get_all`);
+        if (!response.ok) throw new Error("API Network error");
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+            return data.items.map((item: any) => ({
+                id: item.id,
+                appId: item.app_id,
+                type: item.type,
+                url: item.url, // Full URL from server
+                title: item.title,
+                description: item.description,
+                tags: item.tags ? (Array.isArray(item.tags) ? item.tags : JSON.parse(item.tags)) : [],
+                createdAt: parseInt(item.created_at) || Date.now()
+            }));
+        }
+    } catch (e) {
+        console.error("API Fetch Error:", e);
+        // Fallback or just return empty? Let's just log.
     }
   }
 
@@ -78,47 +84,63 @@ export const getAllMediaItems = async (): Promise<MediaItem[]> => {
 
 /**
  * Saves a media item. 
- * If Supabase is active: Uploads file to Storage -> Saves metadata to DB.
+ * If API URL is set: Uploads to Server (PHP).
  * If Local: Saves Base64 directly to IndexedDB.
  */
 export const saveMediaItem = async (item: MediaItem): Promise<void> => {
-  // 1. Try Supabase
-  if (isSupabaseConfigured()) {
-    const supabase = getSupabaseClient();
-    if (supabase) {
-        try {
-            let fileUrl = item.url;
+  const apiUrl = getApiUrl();
 
-            // Check if it's base64 (newly generated), if so upload it
-            if (item.url.startsWith('data:')) {
-                const extension = item.type === 'IMAGE' ? 'png' : 'mp4';
-                const fileName = `${item.appId}/${item.id}.${extension}`;
-                fileUrl = await uploadFileToSupabase(item.url, fileName);
+  // 1. Try Custom API
+  if (apiUrl) {
+    try {
+        const formData = new FormData();
+        formData.append('action', 'save');
+        formData.append('id', item.id);
+        formData.append('app_id', item.appId);
+        formData.append('type', item.type);
+        formData.append('title', item.title);
+        formData.append('description', item.description);
+        formData.append('tags', JSON.stringify(item.tags));
+        formData.append('created_at', item.createdAt.toString());
+
+        // Handle File Upload
+        if (item.url.startsWith('data:')) {
+            // Convert Base64 to Blob
+            const base64Content = item.url.split(',')[1];
+            const mimeType = item.url.match(/[^:]\w+\/[\w-+\d.]+(?=;|,)/)?.[0] || 'image/png';
+            const byteCharacters = atob(base64Content);
+            const byteArrays = [];
+            for (let offset = 0; offset < byteCharacters.length; offset += 512) {
+                const slice = byteCharacters.slice(offset, offset + 512);
+                const byteNumbers = new Array(slice.length);
+                for (let i = 0; i < slice.length; i++) {
+                    byteNumbers[i] = slice.charCodeAt(i);
+                }
+                const byteArray = new Uint8Array(byteNumbers);
+                byteArrays.push(byteArray);
             }
-
-            // Upsert into DB
-            const { error } = await supabase.from('media_items').upsert({
-                id: item.id,
-                app_id: item.appId,
-                type: item.type,
-                url: fileUrl, // Save the cloud URL, not base64
-                title: item.title,
-                description: item.description,
-                tags: item.tags,
-                created_at: item.createdAt
-            });
-
-            if (error) throw error;
-            return; // Success
-        } catch (err: any) {
-            console.error("Supabase Save Failed:", err);
-            const errMsg = err.message || JSON.stringify(err);
-            
-            // Show detailed error to help user fix RLS issues
-            alert(`Bulut kaydı başarısız oldu (Supabase Hatası):\n\n${errMsg}\n\nYerel veritabanına kaydediliyor...`);
-            
-            // Fallthrough to IndexedDB on error
+            const blob = new Blob(byteArrays, { type: mimeType });
+            const filename = `${item.id}.${item.type === 'IMAGE' ? 'png' : 'mp4'}`;
+            formData.append('file', blob, filename);
+        } else {
+            // Already a URL (Edit mode without changing file)
+            formData.append('existing_url', item.url);
         }
+
+        const response = await fetch(apiUrl, {
+            method: 'POST',
+            body: formData
+        });
+
+        const result = await response.json();
+        if (result.status !== 'success') {
+            throw new Error(result.message || "Unknown API Error");
+        }
+        return; // Success
+
+    } catch (err: any) {
+        console.error("Server Save Failed:", err);
+        alert(`Sunucuya kayıt başarısız oldu:\n${err.message}\n\nYerel veritabanına kaydediliyor...`);
     }
   }
 
@@ -134,17 +156,19 @@ export const saveMediaItem = async (item: MediaItem): Promise<void> => {
 };
 
 export const deleteMediaItem = async (id: string): Promise<void> => {
-  // 1. Try Supabase
-  if (isSupabaseConfigured()) {
-    const supabase = getSupabaseClient();
-    if (supabase) {
-       await supabase.from('media_items').delete().eq('id', id);
-       // Note: We're not deleting the file from storage to keep it simple, but you could.
-       return;
+  const apiUrl = getApiUrl();
+
+  // 1. Try Custom API
+  if (apiUrl) {
+    try {
+        await fetch(`${apiUrl}?action=delete&id=${id}`);
+        // We assume it worked
+    } catch (e) {
+        console.error("API Delete Error", e);
     }
   }
 
-  // 2. Fallback to IndexedDB
+  // 2. Fallback to IndexedDB (Always try to delete local copy too)
   const db = await openDB();
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(STORE_NAME, 'readwrite');

@@ -1,9 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
-import { Key, Save, CheckCircle2, AlertTriangle, Eye, EyeOff, Plus, Trash2, Layers, Cloud, Database, HelpCircle } from 'lucide-react';
+import { Key, Save, CheckCircle2, AlertTriangle, Eye, EyeOff, Plus, Trash2, Layers, Server } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 import { AppProfile } from '../types';
-import { getSupabaseConfig } from '../services/supabaseClient';
 
 interface SettingsViewProps {
   apps: AppProfile[];
@@ -18,10 +17,9 @@ const SettingsView: React.FC<SettingsViewProps> = ({ apps, onAddApp, onDeleteApp
   const [geminiSaved, setGeminiSaved] = useState(false);
   const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
 
-  // Supabase State
-  const [sbUrl, setSbUrl] = useState('');
-  const [sbKey, setSbKey] = useState('');
-  const [sbSaved, setSbSaved] = useState(false);
+  // Custom API State
+  const [apiUrl, setApiUrl] = useState('');
+  const [apiSaved, setApiSaved] = useState(false);
 
   // App Creation State
   const [newAppName, setNewAppName] = useState('');
@@ -32,10 +30,8 @@ const SettingsView: React.FC<SettingsViewProps> = ({ apps, onAddApp, onDeleteApp
     const storedKey = localStorage.getItem('gemini_api_key');
     if (storedKey) setApiKey(storedKey);
 
-    // Load Supabase config (Defaults or LocalStorage)
-    const { url, key } = getSupabaseConfig();
-    setSbUrl(url);
-    setSbKey(key);
+    const storedApiUrl = localStorage.getItem('custom_api_url');
+    if (storedApiUrl) setApiUrl(storedApiUrl);
   }, []);
 
   // --- GEMINI HANDLERS ---
@@ -66,22 +62,16 @@ const SettingsView: React.FC<SettingsViewProps> = ({ apps, onAddApp, onDeleteApp
     }
   };
 
-  // --- SUPABASE HANDLERS ---
-  const handleSaveSupabase = () => {
-      if (sbUrl.trim() && sbKey.trim()) {
-          localStorage.setItem('supabase_url', sbUrl.trim());
-          localStorage.setItem('supabase_key', sbKey.trim());
-          setSbSaved(true);
-          setTimeout(() => setSbSaved(false), 3000);
-          alert("Ayarlar kaydedildi. Android uygulamanız artık verilere erişebilir.");
+  // --- API HANDLERS ---
+  const handleSaveApi = () => {
+      if (apiUrl.trim()) {
+          localStorage.setItem('custom_api_url', apiUrl.trim());
+          setApiSaved(true);
+          setTimeout(() => setApiSaved(false), 3000);
+          alert("Sunucu bağlantı adresi kaydedildi.");
       } else {
-          localStorage.removeItem('supabase_url');
-          localStorage.removeItem('supabase_key');
-          alert("Özel ayarlar silindi, varsayılan değerlere dönülecek.");
-          
-          const { url, key } = getSupabaseConfig();
-          setSbUrl(url);
-          setSbKey(key);
+          localStorage.removeItem('custom_api_url');
+          alert("Sunucu adresi silindi. Sistem yerel moda (IndexedDB) döndü.");
       }
   };
 
@@ -147,58 +137,36 @@ const SettingsView: React.FC<SettingsViewProps> = ({ apps, onAddApp, onDeleteApp
         </div>
       </div>
 
-      {/* 2. Supabase Configuration (Android Backend) */}
-      <div className="bg-slate-800 rounded-2xl border border-slate-700 shadow-xl overflow-hidden border-l-4 border-l-green-500">
+      {/* 2. Custom Server Configuration */}
+      <div className="bg-slate-800 rounded-2xl border border-slate-700 shadow-xl overflow-hidden border-l-4 border-l-blue-500">
         <div className="p-6 border-b border-slate-700 bg-slate-900/50 flex items-center gap-3">
-          <div className="bg-green-500/10 p-2 rounded-lg">
-             <Database className="w-6 h-6 text-green-400" />
+          <div className="bg-blue-500/10 p-2 rounded-lg">
+             <Server className="w-6 h-6 text-blue-400" />
           </div>
           <div>
-            <h2 className="text-xl font-bold text-white">Android Bağlantısı (Supabase)</h2>
-            <p className="text-sm text-slate-400">Android uygulamanızın verilere erişmesi için burayı doldurun.</p>
+            <h2 className="text-xl font-bold text-white">Sunucu Bağlantısı (Kendi Hostunuz)</h2>
+            <p className="text-sm text-slate-400">Verilerinizi kendi sunucunuzda (MySQL) saklayın.</p>
           </div>
         </div>
 
         <div className="p-8 space-y-6">
-           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-               <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Project URL</label>
-                  <input 
-                      type="text" 
-                      value={sbUrl}
-                      onChange={(e) => setSbUrl(e.target.value)}
-                      placeholder="https://xyz.supabase.co"
-                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white focus:border-green-500 outline-none"
-                  />
-               </div>
-               <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Anon Public Key</label>
-                  <input 
-                      type="password" 
-                      value={sbKey}
-                      onChange={(e) => setSbKey(e.target.value)}
-                      placeholder="eyJhbGciOiJIUzI1NiIsInR5..."
-                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white focus:border-green-500 outline-none"
-                  />
-               </div>
-           </div>
-           
-           <div className="bg-amber-900/20 p-4 rounded-lg border border-amber-700/50 text-xs text-slate-300">
-               <div className="flex items-center gap-2 mb-2 text-amber-500 font-bold">
-                   <AlertTriangle className="w-4 h-4" />
-                   <span>Kaydetme Hatası Alıyor musunuz?</span>
-               </div>
-               <p className="mb-2">Eğer "row-level security" hatası alıyorsanız, Supabase panelinden şunları yapın:</p>
-               <ol className="list-decimal list-inside space-y-1 ml-2 text-slate-400">
-                   <li><strong>SQL Editor</strong> kısmına gidin.</li>
-                   <li>Şu komutu çalıştırın: <code className="bg-black/50 px-1 rounded text-green-400">ALTER TABLE media_items DISABLE ROW LEVEL SECURITY;</code></li>
-                   <li>Ayrıca Storage kısmında "wallpapers" bucket'ının Public olduğundan emin olun.</li>
-               </ol>
+           <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">API Dosyası URL'si</label>
+              <input 
+                  type="text" 
+                  value={apiUrl}
+                  onChange={(e) => setApiUrl(e.target.value)}
+                  placeholder="https://mysite.com/wallpapers/api.php"
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white focus:border-blue-500 outline-none"
+              />
+              <p className="text-xs text-slate-500 mt-2">
+                * Bu dosyayı sunucunuza yüklemelisiniz. Kodları <strong>API / JSON</strong> menüsünden alabilirsiniz.
+              </p>
            </div>
 
            <div className="flex justify-end">
-               <button onClick={handleSaveSupabase} className="px-6 py-2.5 bg-green-600 hover:bg-green-500 text-white rounded-lg font-medium shadow-lg shadow-green-900/20 flex items-center gap-2 transition-all">
-                  {sbSaved ? <CheckCircle2 className="w-4 h-4" /> : <Save className="w-4 h-4" />} Bağlantıyı Kur
+               <button onClick={handleSaveApi} className="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium shadow-lg shadow-blue-900/20 flex items-center gap-2 transition-all">
+                  {apiSaved ? <CheckCircle2 className="w-4 h-4" /> : <Save className="w-4 h-4" />} Bağlantıyı Kaydet
                </button>
            </div>
         </div>

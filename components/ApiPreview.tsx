@@ -1,8 +1,7 @@
 
 import React, { useState } from 'react';
 import { MediaItem, MediaType, AppProfile } from '../types';
-import { Copy, Code, Smartphone, Check, Database, AlertTriangle } from 'lucide-react';
-import { isSupabaseConfigured, getSupabaseConfig } from '../services/supabaseClient';
+import { Copy, Code, Smartphone, Check, Database, AlertTriangle, Server, FileCode } from 'lucide-react';
 
 interface ApiPreviewProps {
   items: MediaItem[];
@@ -10,142 +9,164 @@ interface ApiPreviewProps {
 }
 
 const ApiPreview: React.FC<ApiPreviewProps> = ({ items, activeApp }) => {
-  const [activeTab, setActiveTab] = useState<'android' | 'json'>('android');
+  const [activeTab, setActiveTab] = useState<'android' | 'php'>('php');
   const [copied, setCopied] = useState(false);
-  const isCloud = isSupabaseConfigured();
+  const isCustomApi = !!localStorage.getItem('custom_api_url');
 
   const appItems = items.filter(i => i.appId === activeApp.id);
 
-  // ANDROID KOTLIN CODE GENERATOR
-  const generateAndroidCode = () => {
-    const { url, key } = getSupabaseConfig();
-    const sbUrl = url;
-    const sbKey = key;
+  // PHP API CODE GENERATOR
+  const generatePhpCode = () => {
+    return `<?php
+/*
+  api.php - PurrfectAdmin Backend Bridge
+  Bu dosyayı sunucunuza yükleyin.
+  'media_items' tablosunun MySQL'de olduğundan emin olun.
+*/
 
+header("Access-Control-Allow-Origin: *");
+header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
+header("Access-Control-Allow-Headers: Content-Type");
+header('Content-Type: application/json');
+
+// --- VERİTABANI AYARLARI (DÜZENLEYİN) ---
+$host = 'localhost';
+$db   = 'veritabani_adi';
+$user = 'kullanici_adi';
+$pass = 'sifre';
+$charset = 'utf8mb4';
+
+// Klasör Ayarı (Resimlerin yükleneceği yer)
+$uploadDir = 'uploads/'; 
+if (!file_exists($uploadDir)) { mkdir($uploadDir, 0777, true); }
+
+$dsn = "mysql:host=$host;dbname=$db;charset=$charset";
+$options = [
+    PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
+    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+    PDO::ATTR_EMULATE_PREPARES   => false,
+];
+
+try {
+     $pdo = new PDO($dsn, $user, $pass, $options);
+} catch (\PDOException $e) {
+     echo json_encode(['status' => 'error', 'message' => 'DB Connection Failed']);
+     exit;
+}
+
+// SQL TABLOSUNU OLUŞTUR (YOKSA)
+$sql = "CREATE TABLE IF NOT EXISTS media_items (
+    id VARCHAR(255) PRIMARY KEY,
+    app_id VARCHAR(255),
+    type VARCHAR(50),
+    url TEXT,
+    title VARCHAR(255),
+    description TEXT,
+    tags TEXT,
+    created_at BIGINT
+)";
+$pdo->exec($sql);
+
+$action = $_GET['action'] ?? '';
+
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && $action === 'get_all') {
+    $stmt = $pdo->query("SELECT * FROM media_items ORDER BY created_at DESC");
+    $items = $stmt->fetchAll();
+    echo json_encode(['status' => 'success', 'items' => $items]);
+}
+
+elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'save') {
+    $id = $_POST['id'];
+    $fileUrl = $_POST['existing_url'] ?? '';
+
+    // Dosya Yükleme İşlemi
+    if (isset($_FILES['file'])) {
+        $fileName = basename($_FILES['file']['name']);
+        $targetPath = $uploadDir . $fileName;
+        if (move_uploaded_file($_FILES['file']['tmp_name'], $targetPath)) {
+            // Tam URL oluştur (Sunucu ayarınıza göre değişebilir)
+            $protocol = isset($_SERVER['HTTPS']) ? 'https://' : 'http://';
+            $fileUrl = $protocol . $_SERVER['HTTP_HOST'] . dirname($_SERVER['PHP_SELF']) . '/' . $targetPath;
+        } else {
+            echo json_encode(['status' => 'error', 'message' => 'File upload failed']);
+            exit;
+        }
+    }
+
+    $sql = "INSERT INTO media_items (id, app_id, type, url, title, description, tags, created_at) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE 
+            url=VALUES(url), title=VALUES(title), description=VALUES(description), tags=VALUES(tags)";
+    
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute([
+        $id, 
+        $_POST['app_id'], 
+        $_POST['type'], 
+        $fileUrl, 
+        $_POST['title'], 
+        $_POST['description'], 
+        $_POST['tags'], // JSON string olarak gelir
+        $_POST['created_at']
+    ]);
+
+    echo json_encode(['status' => 'success', 'url' => $fileUrl]);
+}
+
+elseif ($_GET['action'] === 'delete' && isset($_GET['id'])) {
+    $stmt = $pdo->prepare("DELETE FROM media_items WHERE id = ?");
+    $stmt->execute([$_GET['id']]);
+    echo json_encode(['status' => 'success']);
+}
+?>`;
+  };
+
+  const generateAndroidCode = () => {
+    const apiUrl = localStorage.getItem('custom_api_url') || 'https://site.com/api.php';
+    
     return `
 /* 
    ---------------------------------------------------------
-   ADIM 1: build.gradle.kts (Module: app) dosyanıza ekleyin:
+   ANDROID - RETROFIT IMPLEMENTATION
    ---------------------------------------------------------
-   
-   plugins {
-       kotlin("plugin.serialization") version "1.9.0" // Versiyon projenize göre değişebilir
-   }
-
-   dependencies {
-       // Supabase
-       implementation("io.github.jan-tennert.supabase:postgrest-kt:2.5.0")
-       implementation("io.ktor:ktor-client-android:2.3.12")
-       
-       // JSON Serialization
-       implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
-       
-       // Resim Yükleme için (Coil önerilir)
-       implementation("io.coil-kt:coil:2.6.0")
-   }
 */
 
-import io.github.jan_tennert.supabase.createSupabaseClient
-import io.github.jan_tennert.supabase.postgrest.Postgrest
-import io.github.jan_tennert.supabase.postgrest.from
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
+import com.google.gson.annotations.SerializedName
+import retrofit2.http.GET
+import retrofit2.http.Query
 
-// ---------------------------------------------------------
-// ADIM 2: Veri Modeli (Data Class)
-// ---------------------------------------------------------
-
-@Serializable
-data class WallpaperItem(
-    val id: String,
-    
-    @SerialName("app_id") 
-    val appId: String,
-    
-    val type: String, // 'IMAGE' veya 'VIDEO'
-    
-    val url: String,  // Resmin/Videonun doğrudan linki
-    
-    val title: String,
-    
-    val description: String? = null,
-    
-    val tags: List<String> = emptyList(),
-    
-    @SerialName("created_at")
-    val createdAt: Long = 0
+// 1. Data Model
+data class WallpaperResponse(
+    val status: String,
+    val items: List<WallpaperItem>
 )
 
-// ---------------------------------------------------------
-// ADIM 3: Veri Çekme Sınıfı (Repository)
-// ---------------------------------------------------------
+data class WallpaperItem(
+    val id: String,
+    @SerializedName("app_id") val appId: String,
+    val type: String,
+    val url: String,
+    val title: String,
+    val tags: String // Not: PHP'den string gelebilir, Gson ile List'e çevirmek gerekebilir
+)
 
-class WallpaperRepository {
-
-    // İstemciyi başlat
-    private val supabase = createSupabaseClient(
-        supabaseUrl = "${sbUrl}",
-        supabaseKey = "${sbKey}"
-    ) {
-        install(Postgrest)
-    }
-
-    /**
-     * "${activeApp.name}" uygulaması için içerikleri çeker.
-     */
-    suspend fun getWallpapers(): List<WallpaperItem> {
-        return try {
-            supabase.from("media_items")
-                .select {
-                    // Sadece bu uygulamaya ait verileri filtrele
-                    filter {
-                        eq("app_id", "${activeApp.id}")
-                    }
-                    // En yeniden eskiye sırala
-                    order("created_at", order = io.github.jan_tennert.supabase.postgrest.query.Order.DESCENDING)
-                }
-                .decodeList<WallpaperItem>()
-        } catch (e: Exception) {
-            e.printStackTrace()
-            emptyList()
-        }
-    }
+// 2. API Interface
+interface WallpaperApi {
+    @GET("api.php?action=get_all")
+    suspend fun getAllWallpapers(): WallpaperResponse
 }
 
-/*
-   KULLANIM ÖRNEĞİ (ViewModel veya Activity içinde):
-   
-   val repo = WallpaperRepository()
-   scope.launch {
-       val wallpapers = repo.getWallpapers()
-       wallpapers.forEach { item ->
-           println("Başlık: \${item.title}, Link: \${item.url}")
-       }
-   }
-*/
-`.trim();
+// 3. Kullanım
+val retrofit = Retrofit.Builder()
+    .baseUrl("${apiUrl.replace('api.php', '')}") 
+    .addConverterFactory(GsonConverterFactory.create())
+    .build()
+
+val api = retrofit.create(WallpaperApi::class.java)
+`;
   };
 
-  const generateJson = () => {
-    return JSON.stringify({
-        source: isCloud ? "Supabase Cloud" : "Local Browser Storage (Not accessible to Android)",
-        warning: isCloud ? "" : "DİKKAT: Ayarlardan Supabase bağlantısını yapmazsanız Android veriye erişemez.",
-        app_name: activeApp.name,
-        app_id: activeApp.id,
-        count: appItems.length,
-        items: appItems.map(item => ({
-             id: item.id,
-             app_id: item.appId,
-             type: item.type,
-             url: item.url,
-             title: item.title,
-             tags: item.tags,
-             created_at: item.createdAt
-        }))
-    }, null, 2);
-  };
-
-  const content = activeTab === 'android' ? generateAndroidCode() : generateJson();
+  const content = activeTab === 'php' ? generatePhpCode() : generateAndroidCode();
 
   const handleCopy = () => {
     navigator.clipboard.writeText(content);
@@ -156,19 +177,19 @@ class WallpaperRepository {
   return (
     <div className="max-w-5xl mx-auto space-y-6 h-[calc(100vh-10rem)] flex flex-col">
         
-        <div className={`p-6 rounded-2xl border shadow-lg shrink-0 ${isCloud ? 'bg-slate-800 border-green-500/30' : 'bg-red-900/20 border-red-500/50'}`}>
+        <div className={`p-6 rounded-2xl border shadow-lg shrink-0 ${isCustomApi ? 'bg-slate-800 border-blue-500/30' : 'bg-amber-900/20 border-amber-500/50'}`}>
             <div className="flex items-start gap-4">
-                <div className={`p-3 rounded-xl ${isCloud ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
-                    {isCloud ? <Database className="w-6 h-6" /> : <AlertTriangle className="w-6 h-6" />}
+                <div className={`p-3 rounded-xl ${isCustomApi ? 'bg-blue-500/20 text-blue-400' : 'bg-amber-500/20 text-amber-400'}`}>
+                    {isCustomApi ? <Server className="w-6 h-6" /> : <AlertTriangle className="w-6 h-6" />}
                 </div>
                 <div>
                     <h2 className="text-xl font-bold text-white mb-1">
-                        {isCloud ? "Bulut Bağlantısı Aktif" : "Bulut Bağlantısı Yok!"}
+                        {isCustomApi ? "Sunucu Bağlantısı Aktif" : "Sunucu Yapılandırılmadı"}
                     </h2>
                     <p className="text-sm text-slate-300">
-                        {isCloud 
-                            ? "Sistem Supabase'e bağlı. Aşağıdaki Kotlin kodunu Android projenize yapıştırıp kullanabilirsiniz." 
-                            : "Şu an veriler sadece bu tarayıcıda (Local) kayıtlı. Android uygulamanızın verilere erişebilmesi için 'Settings' kısmından Supabase ayarlarını yapmalısınız."}
+                        {isCustomApi 
+                            ? "Sistem kendi sunucunuzdaki 'api.php' dosyasına bağlı çalışıyor." 
+                            : "Verileri sunucunuzda tutmak için 'api.php' dosyasını oluşturup Settings kısmına adresini giriniz."}
                     </p>
                 </div>
             </div>
@@ -177,11 +198,11 @@ class WallpaperRepository {
         <div className="flex-1 bg-slate-900 rounded-xl border border-slate-700 overflow-hidden shadow-2xl flex flex-col min-h-0">
             <div className="flex justify-between items-center p-2 bg-slate-950 border-b border-slate-800 shrink-0">
                 <div className="flex gap-1 bg-slate-900 p-1 rounded-lg border border-slate-800">
+                    <button onClick={() => setActiveTab('php')} className={`px-4 py-1.5 rounded-md text-sm font-medium flex items-center gap-2 transition-all ${activeTab === 'php' ? 'bg-purple-600 text-white' : 'text-slate-500 hover:text-slate-300'}`}>
+                        <FileCode className="w-4 h-4" /> api.php (Backend)
+                    </button>
                     <button onClick={() => setActiveTab('android')} className={`px-4 py-1.5 rounded-md text-sm font-medium flex items-center gap-2 transition-all ${activeTab === 'android' ? 'bg-green-600 text-white' : 'text-slate-500 hover:text-slate-300'}`}>
                         <Smartphone className="w-4 h-4" /> Android (Kotlin)
-                    </button>
-                    <button onClick={() => setActiveTab('json')} className={`px-4 py-1.5 rounded-md text-sm font-medium flex items-center gap-2 transition-all ${activeTab === 'json' ? 'bg-blue-600 text-white' : 'text-slate-500 hover:text-slate-300'}`}>
-                        <Code className="w-4 h-4" /> Raw JSON Preview
                     </button>
                 </div>
 
@@ -192,7 +213,7 @@ class WallpaperRepository {
 
             <div className="flex-1 overflow-auto relative custom-scrollbar bg-[#0d1117]">
                 <pre className="p-6 text-sm font-mono leading-relaxed">
-                    <code className={activeTab === 'android' ? "text-green-300" : "text-blue-300"}>
+                    <code className={activeTab === 'php' ? "text-purple-300" : "text-green-300"}>
                         {content}
                     </code>
                 </pre>
