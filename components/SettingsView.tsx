@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Key, Save, CheckCircle2, AlertTriangle, Eye, EyeOff, Plus, Trash2, Layers, Server, Sparkles } from 'lucide-react';
+import { Key, Save, CheckCircle2, AlertTriangle, Eye, EyeOff, Plus, Trash2, Layers, Server, Sparkles, Palette } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 import { AppProfile } from '../types';
 
@@ -22,6 +22,11 @@ const SettingsView: React.FC<SettingsViewProps> = ({ apps, onAddApp, onDeleteApp
   const [showOpenRouterKey, setShowOpenRouterKey] = useState(false);
   const [openRouterSaved, setOpenRouterSaved] = useState(false);
 
+  // Stability AI State
+  const [stabilityKey, setStabilityKey] = useState('');
+  const [showStabilityKey, setShowStabilityKey] = useState(false);
+  const [stabilitySaved, setStabilitySaved] = useState(false);
+
   // Custom API State
   const [apiUrl, setApiUrl] = useState('');
   const [apiSaved, setApiSaved] = useState(false);
@@ -40,6 +45,9 @@ const SettingsView: React.FC<SettingsViewProps> = ({ apps, onAddApp, onDeleteApp
 
     const storedOpenRouterKey = localStorage.getItem('openrouter_api_key');
     if (storedOpenRouterKey) setOpenRouterKey(storedOpenRouterKey);
+
+    const storedStabilityKey = localStorage.getItem('stability_api_key');
+    if (storedStabilityKey) setStabilityKey(storedStabilityKey);
   }, []);
 
   // --- GEMINI HANDLERS ---
@@ -79,6 +87,18 @@ const SettingsView: React.FC<SettingsViewProps> = ({ apps, onAddApp, onDeleteApp
     } else {
       localStorage.removeItem('openrouter_api_key');
       setOpenRouterSaved(true);
+    }
+  };
+
+  // --- STABILITY AI HANDLERS ---
+  const handleSaveStabilityKey = () => {
+    if (stabilityKey.trim()) {
+      localStorage.setItem('stability_api_key', stabilityKey.trim());
+      setStabilitySaved(true);
+      setTimeout(() => setStabilitySaved(false), 3000);
+    } else {
+      localStorage.removeItem('stability_api_key');
+      setStabilitySaved(true);
     }
   };
 
@@ -165,7 +185,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ apps, onAddApp, onDeleteApp
           </div>
           <div>
             <h2 className="text-xl font-bold text-white">OpenRouter API (Opsiyonel)</h2>
-            <p className="text-sm text-slate-400">Flux ve Ücretsiz Modelleri kullanmak için gereklidir.</p>
+            <p className="text-sm text-slate-400">Grok (xAI) ve diğer modelleri kullanmak için gereklidir.</p>
           </div>
         </div>
 
@@ -193,7 +213,43 @@ const SettingsView: React.FC<SettingsViewProps> = ({ apps, onAddApp, onDeleteApp
         </div>
       </div>
 
-      {/* 3. Custom Server Configuration */}
+      {/* 3. Stability AI Configuration */}
+      <div className="bg-slate-800 rounded-2xl border border-slate-700 shadow-xl overflow-hidden">
+        <div className="p-6 border-b border-slate-700 bg-slate-900/50 flex items-center gap-3">
+          <div className="bg-indigo-500/10 p-2 rounded-lg">
+             <Palette className="w-6 h-6 text-indigo-400" />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold text-white">Stability AI (SD3)</h2>
+            <p className="text-sm text-slate-400">Stable Diffusion 3 modelini kullanmak için gereklidir.</p>
+          </div>
+        </div>
+
+        <div className="p-8 space-y-6">
+          <div>
+             <label className="block text-sm font-medium text-slate-300 mb-2">Stability AI API Anahtarı</label>
+             <div className="relative">
+                <input 
+                   type={showStabilityKey ? "text" : "password"}
+                   value={stabilityKey}
+                   onChange={(e) => setStabilityKey(e.target.value)}
+                   placeholder="sk-..."
+                   className="w-full bg-slate-900 border border-slate-700 rounded-xl py-3 pl-4 pr-12 text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 transition-all font-mono"
+                />
+                <button onClick={() => setShowStabilityKey(!showStabilityKey)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white transition-colors p-1">
+                   {showStabilityKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+             </div>
+          </div>
+          <div className="flex justify-end pt-4 border-t border-slate-700">
+             <button onClick={handleSaveStabilityKey} className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-medium shadow-lg shadow-indigo-900/30 flex items-center gap-2 transition-all">
+                {stabilitySaved ? <CheckCircle2 className="w-4 h-4" /> : <Save className="w-4 h-4" />} Kaydet
+             </button>
+          </div>
+        </div>
+      </div>
+
+      {/* 4. Custom Server Configuration */}
       <div className="bg-slate-800 rounded-2xl border border-slate-700 shadow-xl overflow-hidden border-l-4 border-l-blue-500">
         <div className="p-6 border-b border-slate-700 bg-slate-900/50 flex items-center gap-3">
           <div className="bg-blue-500/10 p-2 rounded-lg">
@@ -228,7 +284,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ apps, onAddApp, onDeleteApp
         </div>
       </div>
 
-      {/* 4. App Management */}
+      {/* 5. App Management */}
       <div className="bg-slate-800 rounded-2xl border border-slate-700 shadow-xl overflow-hidden">
         <div className="p-6 border-b border-slate-700 bg-slate-900/50 flex items-center gap-3">
           <div className="bg-blue-500/10 p-2 rounded-lg">

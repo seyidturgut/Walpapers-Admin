@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
-import { Wand2, Loader2, Save, RefreshCw, Sparkles, TextCursorInput, Film, Image as ImageIcon, Download, Zap, Cpu, Palette } from 'lucide-react';
-import { generateWallpaper, generateFluxWallpaper, generateMediaMetadata, generateVideoWallpaper, generateCreativePrompt, generateImageWithGrok } from '../services/geminiService';
+import { Wand2, Loader2, Save, RefreshCw, Sparkles, TextCursorInput, Film, Image as ImageIcon, Download, Zap, Cpu, Palette, Aperture } from 'lucide-react';
+import { generateWallpaper, generateFluxWallpaper, generateMediaMetadata, generateVideoWallpaper, generateCreativePrompt, generateImageWithGrok, generateImageWithStability } from '../services/geminiService';
 import { MediaType, MediaItem, AiMetadataResponse, AppProfile } from '../types';
 
 interface AiGeneratorProps {
@@ -11,7 +11,7 @@ interface AiGeneratorProps {
 
 const AiGenerator: React.FC<AiGeneratorProps> = ({ onSave, activeApp }) => {
   const [activeTab, setActiveTab] = useState<'image' | 'video'>('image');
-  const [imageModel, setImageModel] = useState<'gemini' | 'flux' | 'grok'>('gemini'); 
+  const [imageModel, setImageModel] = useState<'gemini' | 'flux' | 'grok' | 'sd3'>('flux'); 
   const [prompt, setPrompt] = useState('');
   
   const [generatedMediaUrl, setGeneratedMediaUrl] = useState<string | null>(null);
@@ -63,7 +63,7 @@ const AiGenerator: React.FC<AiGeneratorProps> = ({ onSave, activeApp }) => {
       // 1. Generate Media
       if (activeTab === 'image') {
         if (imageModel === 'gemini') {
-            setLoadingPhase("Görsel üretiliyor (Gemini 3 Pro)...");
+            setLoadingPhase("Görsel üretiliyor (Gemini 3 Pro - 4K Ultra HD)...");
             const base64Image = await generateWallpaper(prompt);
             setGeneratedMediaUrl(base64Image);
             
@@ -72,7 +72,7 @@ const AiGenerator: React.FC<AiGeneratorProps> = ({ onSave, activeApp }) => {
             setMetadata(generatedMeta);
         } else if (imageModel === 'flux') {
             // FLUX MODEL (Gemini Native)
-            setLoadingPhase("Prompt Gemini ile iyileştiriliyor ve Flux ile üretiliyor...");
+            setLoadingPhase("Gemini promptu hazırlıyor, Flux 4K görseli işliyor...");
             const base64Image = await generateFluxWallpaper(prompt);
             setGeneratedMediaUrl(base64Image);
 
@@ -81,8 +81,17 @@ const AiGenerator: React.FC<AiGeneratorProps> = ({ onSave, activeApp }) => {
             setMetadata(generatedMeta);
         } else if (imageModel === 'grok') {
             // GROK MODEL
-            setLoadingPhase("Grok (xAI) promptu mükemmelleştiriyor ve Flux üretiyor...");
+            setLoadingPhase("Grok (xAI) promptu mükemmelleştiriyor, Flux 4K görseli işliyor...");
             const base64Image = await generateImageWithGrok(prompt);
+            setGeneratedMediaUrl(base64Image);
+
+            setLoadingPhase("İçerik analiz ediliyor...");
+            const generatedMeta = await generateMediaMetadata(base64Image, 'image/png', activeApp);
+            setMetadata(generatedMeta);
+        } else if (imageModel === 'sd3') {
+            // STABLE DIFFUSION 3
+            setLoadingPhase("SD3 Prompt hazırlanıyor, Stability AI 4K görseli işliyor...");
+            const base64Image = await generateImageWithStability(prompt);
             setGeneratedMediaUrl(base64Image);
 
             setLoadingPhase("İçerik analiz ediliyor...");
@@ -92,12 +101,25 @@ const AiGenerator: React.FC<AiGeneratorProps> = ({ onSave, activeApp }) => {
 
       } else {
         setLoadingPhase("Video render alınıyor (Veo 3.1)... Bu işlem 1-2 dakika sürebilir.");
-        const base64Video = await generateVideoWallpaper(prompt);
-        setGeneratedMediaUrl(base64Video);
+        try {
+            const base64Video = await generateVideoWallpaper(prompt);
+            setGeneratedMediaUrl(base64Video);
 
-        setLoadingPhase("Video analiz ediliyor...");
-        const generatedMeta = await generateMediaMetadata(base64Video, 'video/mp4', activeApp);
-        setMetadata(generatedMeta);
+            setLoadingPhase("Video analiz ediliyor...");
+            const generatedMeta = await generateMediaMetadata(base64Video, 'video/mp4', activeApp);
+            setMetadata(generatedMeta);
+        } catch (videoError) {
+             console.error("Veo Error, falling back to Flux Image...", videoError);
+             setLoadingPhase("Video API kotası dolu/kapalı. Kapak görseli (Flux 4K) üretiliyor...");
+             // Fallback to Flux Image but treat as "Video" type for Metadata
+             const base64Image = await generateFluxWallpaper(prompt);
+             setGeneratedMediaUrl(base64Image); // It's an image, but user will save as 'Video' type effectively a static video or cover
+             
+             setLoadingPhase("Kapak görseli analiz ediliyor...");
+             const generatedMeta = await generateMediaMetadata(base64Image, 'image/png', activeApp);
+             setMetadata(generatedMeta);
+             alert("Uyarı: Google Veo Video servisi yanıt vermediği için yüksek kaliteli bir kapak görseli (4K) üretildi. Bunu video kapağı olarak kullanabilirsiniz.");
+        }
       }
 
     } catch (error) {
@@ -142,7 +164,7 @@ const AiGenerator: React.FC<AiGeneratorProps> = ({ onSave, activeApp }) => {
     link.href = generatedMediaUrl;
     
     const timestamp = new Date().getTime();
-    const extension = activeTab === 'image' ? 'png' : 'mp4';
+    const extension = activeTab === 'image' || generatedMediaUrl.startsWith('data:image') ? 'png' : 'mp4';
     const cleanAppName = activeApp.name.replace(/\s+/g, '-').toLowerCase();
     const filename = `${cleanAppName}-${timestamp}.${extension}`;
     
@@ -185,13 +207,7 @@ const AiGenerator: React.FC<AiGeneratorProps> = ({ onSave, activeApp }) => {
 
                 {/* Sub Model Selector (Only for Image) */}
                 {activeTab === 'image' && (
-                    <div className="grid grid-cols-3 gap-2 mb-6">
-                        <button 
-                            onClick={() => setImageModel('gemini')}
-                            className={`flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold border transition-all ${imageModel === 'gemini' ? 'bg-purple-500/20 border-purple-500 text-purple-300' : 'bg-slate-800 border-slate-700 text-slate-500 hover:bg-slate-700'}`}
-                        >
-                            <Cpu className="w-3.5 h-3.5" /> Gemini 3
-                        </button>
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-6">
                         <button 
                             onClick={() => setImageModel('flux')}
                             className={`flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold border transition-all ${imageModel === 'flux' ? 'bg-pink-500/20 border-pink-500 text-pink-300' : 'bg-slate-800 border-slate-700 text-slate-500 hover:bg-slate-700'}`}
@@ -199,10 +215,22 @@ const AiGenerator: React.FC<AiGeneratorProps> = ({ onSave, activeApp }) => {
                             <Palette className="w-3.5 h-3.5" /> Flux.1
                         </button>
                         <button 
+                            onClick={() => setImageModel('sd3')}
+                            className={`flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold border transition-all ${imageModel === 'sd3' ? 'bg-indigo-500/20 border-indigo-500 text-indigo-300' : 'bg-slate-800 border-slate-700 text-slate-500 hover:bg-slate-700'}`}
+                        >
+                            <Aperture className="w-3.5 h-3.5" /> SD3 (Ücretli)
+                        </button>
+                        <button 
                             onClick={() => setImageModel('grok')}
                             className={`flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold border transition-all ${imageModel === 'grok' ? 'bg-amber-500/20 border-amber-500 text-amber-300' : 'bg-slate-800 border-slate-700 text-slate-500 hover:bg-slate-700'}`}
                         >
                             <Zap className="w-3.5 h-3.5" /> Grok (xAI)
+                        </button>
+                         <button 
+                            onClick={() => setImageModel('gemini')}
+                            className={`flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold border transition-all ${imageModel === 'gemini' ? 'bg-purple-500/20 border-purple-500 text-purple-300' : 'bg-slate-800 border-slate-700 text-slate-500 hover:bg-slate-700'}`}
+                        >
+                            <Cpu className="w-3.5 h-3.5" /> Gemini 3
                         </button>
                     </div>
                 )}
@@ -275,11 +303,11 @@ const AiGenerator: React.FC<AiGeneratorProps> = ({ onSave, activeApp }) => {
                     className={`w-full py-4 bg-gradient-to-r text-white rounded-xl font-bold shadow-lg flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed mt-4 ${activeTab === 'image' ? 'from-amber-500 to-purple-600 hover:from-amber-400 hover:to-purple-500 shadow-purple-900/30' : 'from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 shadow-blue-900/30'}`}
                 >
                     {loading ? (
-                        <><Loader2 className="w-5 h-5 animate-spin" /> Bekleyiniz...</>
+                        <><Loader2 className="w-5 h-5 animate-spin" /> 4K İşleniyor...</>
                     ) : (
                         <><Wand2 className="w-5 h-5" /> 
                           {activeTab === 'image' 
-                            ? (imageModel === 'gemini' ? 'Gemini ile Üret' : imageModel === 'flux' ? 'Flux ile Üret' : 'Grok ile Üret') 
+                            ? (imageModel === 'gemini' ? 'Gemini (4K)' : imageModel === 'flux' ? 'Flux (4K)' : imageModel === 'sd3' ? 'Stability AI (SD3)' : 'Grok (4K)') 
                             : 'Video Oluştur'
                           }
                         </>
@@ -296,7 +324,7 @@ const AiGenerator: React.FC<AiGeneratorProps> = ({ onSave, activeApp }) => {
                         <Loader2 className="w-10 h-10 animate-spin" />
                     </div>
                     <div className="space-y-2">
-                        <h3 className="text-white font-medium text-lg">AI Çalışıyor</h3>
+                        <h3 className="text-white font-medium text-lg">AI Çalışıyor (Ultra HD)</h3>
                         <p className="text-sm text-slate-400 max-w-xs mx-auto">{loadingPhase}</p>
                         <p className="text-xs text-slate-500">Uygulama: {activeApp.name}</p>
                     </div>
@@ -357,7 +385,7 @@ const AiGenerator: React.FC<AiGeneratorProps> = ({ onSave, activeApp }) => {
                         <Film className="w-16 h-16 mx-auto mb-4 text-slate-600" />
                     )}
                     <p className="text-slate-400 font-medium">Önizleme alanı</p>
-                    <p className="text-xs text-slate-500 mt-2">Dikey (9:16) format</p>
+                    <p className="text-xs text-slate-500 mt-2">Dikey (9:16) 4K format</p>
                 </div>
             )}
         </div>

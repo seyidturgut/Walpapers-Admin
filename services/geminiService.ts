@@ -106,7 +106,7 @@ export const generateCreativePrompt = async (type: 'image' | 'video', appContext
   const contextKeywords = appContext?.aiContext || "aesthetic, beautiful, 4k";
 
   const systemInstruction = type === 'image' 
-    ? `You are an expert prompt engineer for AI Image Generators. The user is managing an app called '${appName}' focusing on: ${contextKeywords}. Create a single, highly detailed, artistic, and visually stunning prompt for a mobile wallpaper that fits this specific app theme perfectly. Keep it under 60 words. Output ONLY the prompt text.`
+    ? `You are an expert prompt engineer for AI Image Generators. The user is managing an app called '${appName}' focusing on: ${contextKeywords}. Create a single, highly detailed, artistic, and visually stunning prompt for a mobile wallpaper that fits this specific app theme perfectly. The prompt should explicitly ask for 4K resolution, sharp details, and best quality. Keep it under 60 words. Output ONLY the prompt text.`
     : `You are an expert prompt engineer for AI Video Generators. The user is managing an app called '${appName}' focusing on: ${contextKeywords}. Create a single, descriptive prompt for a short, looping vertical video that fits this specific app theme. Focus on movement and atmosphere. Keep it under 60 words. Output ONLY the prompt text.`;
 
   try {
@@ -128,13 +128,13 @@ export const generateCreativePrompt = async (type: 'image' | 'video', appContext
 
 /**
  * Generates a wallpaper image using Gemini 3 Pro Image (Banana Pro).
- * Enforces 9:16 aspect ratio for mobile devices.
+ * Enforces 9:16 aspect ratio for mobile devices with 4K resolution.
  */
 export const generateWallpaper = async (prompt: string): Promise<string> => {
   const ai = getAiClient();
   
-  // Enhance prompt for maximum quality 2K generation
-  const enhancedPrompt = `Ultra-realistic 2K mobile wallpaper (9:16 vertical): ${prompt}. Masterpiece, hyper-detailed, cinematic lighting, sharp focus, 8k resolution.`;
+  // Enhance prompt for maximum quality 4K generation
+  const enhancedPrompt = `Ultra-realistic 4K mobile wallpaper (9:16 vertical): ${prompt}. Masterpiece, hyper-detailed, cinematic lighting, sharp focus, 8k resolution, raw photo quality.`;
 
   try {
     const response = await ai.models.generateContent({
@@ -149,7 +149,7 @@ export const generateWallpaper = async (prompt: string): Promise<string> => {
       config: {
         imageConfig: {
           aspectRatio: "9:16", // Perfect for mobile wallpapers
-          imageSize: "2K"      // 2K resolution
+          imageSize: "4K"      // 4K resolution (Highest available)
         },
       },
     });
@@ -173,6 +173,7 @@ export const generateWallpaper = async (prompt: string): Promise<string> => {
 
 /**
  * Generates a wallpaper using Flux (via Pollinations) with Gemini as Prompt Engineer.
+ * Configured for Vertical 4K (2160x3840).
  */
 export const generateFluxWallpaper = async (userRawInput: string): Promise<string> => {
   const ai = getAiClient();
@@ -183,7 +184,7 @@ export const generateFluxWallpaper = async (userRawInput: string): Promise<strin
       model: "gemini-2.5-flash",
       contents: `Rewrite this raw input into a highly detailed, English text-to-image prompt suitable for Stable Diffusion/Flux models. Input: "${userRawInput}".`,
       config: {
-        systemInstruction: "You are an expert Prompt Engineer for Flux.1. Your goal is to take user input (which might be in Turkish or simple English) and output a single, highly descriptive, artistic, English prompt. Include lighting, style, and mood keywords. Return ONLY the raw prompt text.",
+        systemInstruction: "You are an expert Prompt Engineer for Flux.1. Your goal is to take user input (which might be in Turkish or simple English) and output a single, highly descriptive, artistic, English prompt. Include lighting, style, and mood keywords. Emphasize '4K resolution', 'highly detailed', 'vertical wallpaper'. Return ONLY the raw prompt text.",
       }
     });
 
@@ -193,8 +194,9 @@ export const generateFluxWallpaper = async (userRawInput: string): Promise<strin
     console.log("Flux Enhanced Prompt:", enhancedPrompt);
 
     // 2. Call Pollinations API
+    // Vertical 4K Resolution: 2160 x 3840
     const encodedPrompt = encodeURIComponent(enhancedPrompt);
-    const pollinationsUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=720&height=1280&model=flux&nologo=true&seed=${Math.floor(Math.random() * 10000)}`;
+    const pollinationsUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=2160&height=3840&model=flux&nologo=true&seed=${Math.floor(Math.random() * 10000)}`;
 
     const imageResponse = await fetch(pollinationsUrl);
     if (!imageResponse.ok) throw new Error("Pollinations API request failed.");
@@ -212,7 +214,8 @@ export const generateFluxWallpaper = async (userRawInput: string): Promise<strin
 
 
 /**
- * NEW: Generates Image using Grok (x-ai/grok-4.1-fast:free via OpenRouter) for Prompting + Pollinations (Flux) for Image.
+ * Generates Image using Grok (x-ai/grok-4.1-fast:free via OpenRouter) for Prompting + Pollinations (Flux) for Image.
+ * Configured for Vertical 4K.
  */
 export const generateImageWithGrok = async (userRawInput: string): Promise<string> => {
   const openRouterApiKey = localStorage.getItem('openrouter_api_key');
@@ -236,7 +239,7 @@ export const generateImageWithGrok = async (userRawInput: string): Promise<strin
         messages: [
           {
             role: "system",
-            content: "You are an expert AI art prompter. Take the user's input (which may be in Turkish or simple terms) and expand it into a detailed, high-quality, English text-to-image prompt suitable for FLUX or Stable Diffusion. Focus on visual details, lighting, and style. Output ONLY the raw prompt text, no introductions or explanations."
+            content: "You are an expert AI art prompter. Take the user's input (which may be in Turkish or simple terms) and expand it into a detailed, high-quality, English text-to-image prompt suitable for FLUX or Stable Diffusion. Focus on visual details, lighting, and style. The image will be generated in 4K Vertical format, so describe it accordingly. Output ONLY the raw prompt text, no introductions or explanations."
           },
           {
             role: "user",
@@ -261,11 +264,11 @@ export const generateImageWithGrok = async (userRawInput: string): Promise<strin
     
     console.log("Grok Enhanced Prompt:", enhancedPrompt);
 
-    // Step 2: Image Generation via Pollinations (Mobile Ratio 9:16)
-    // 720x1280 used for mobile wallpaper
+    // Step 2: Image Generation via Pollinations (Mobile Ratio 9:16 4K)
+    // 2160x3840 used for high quality mobile wallpaper
     const encodedPrompt = encodeURIComponent(enhancedPrompt);
     const randomSeed = Math.floor(Math.random() * 1000000);
-    const pollinationsUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=720&height=1280&model=flux&seed=${randomSeed}&nologo=true`;
+    const pollinationsUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=2160&height=3840&model=flux&seed=${randomSeed}&nologo=true`;
 
     const imageResponse = await fetch(pollinationsUrl);
     if (!imageResponse.ok) {
@@ -279,6 +282,64 @@ export const generateImageWithGrok = async (userRawInput: string): Promise<strin
 
   } catch (error) {
     console.error("generateImageWithGrok error:", error);
+    throw error;
+  }
+};
+
+
+/**
+ * NEW: Generates Image using Stable Diffusion 3 via Stability AI API.
+ */
+export const generateImageWithStability = async (userRawInput: string): Promise<string> => {
+  const stabilityApiKey = localStorage.getItem('stability_api_key');
+  const ai = getAiClient();
+
+  if (!stabilityApiKey) {
+    throw new Error("Stability AI API Key eksik. Lütfen ayarlardan ekleyin.");
+  }
+
+  try {
+    // 1. Enhance Prompt with Gemini (Turkish -> English SD3 Prompt)
+    const promptResponse = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: `Rewrite this raw input into a highly detailed, English text-to-image prompt optimized for Stable Diffusion 3 (SD3). Input: "${userRawInput}".`,
+        config: {
+          systemInstruction: "You are an expert Prompt Engineer for SD3. Output a single, highly descriptive, artistic, English prompt suitable for a 9:16 mobile wallpaper. Return ONLY the raw prompt text.",
+        }
+      });
+  
+    const enhancedPrompt = promptResponse.text || userRawInput;
+    console.log("SD3 Enhanced Prompt:", enhancedPrompt);
+
+    // 2. Call Stability AI API
+    const formData = new FormData();
+    formData.append('prompt', enhancedPrompt);
+    formData.append('aspect_ratio', '9:16');
+    formData.append('output_format', 'png');
+    formData.append('model', 'sd3'); 
+
+    const response = await fetch('https://api.stability.ai/v2beta/stable-image/generate/sd3', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${stabilityApiKey}`,
+        'Accept': 'application/json' 
+      },
+      body: formData
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("Stability API Error:", errorText);
+      throw new Error(`Stability API Error: ${response.status} - ${errorText}`);
+    }
+
+    const data = await response.json();
+    
+    // 3. Return Base64 (Add prefix)
+    return `data:image/png;base64,${data.image}`;
+
+  } catch (error) {
+    console.error("generateImageWithStability error:", error);
     throw error;
   }
 };
