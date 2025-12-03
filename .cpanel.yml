@@ -1,0 +1,6 @@
+---
+deployment:
+  tasks:
+    - export DEPLOYPATH=/home/$USER/public_html/
+    # Eğer alt klasöre kuruyorsanız yukarıdaki yolu değiştirin. Örn: /home/$USER/public_html/admin/
+    - /bin/cp -R dist/* $DEPLOYPATH
