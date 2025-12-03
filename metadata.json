@@ -1,0 +1,7 @@
+{
+  "name": "Wallpapers Admin",
+  "description": "A comprehensive backend management dashboard for your Android Cat Wallpaper & Video application. Upload media, leverage Gemini AI to auto-generate tags and titles, and export your API JSON payload.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
