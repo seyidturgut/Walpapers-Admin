@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Key, Save, CheckCircle2, AlertTriangle, Eye, EyeOff, Plus, Trash2, Layers, Server } from 'lucide-react';
+import { Key, Save, CheckCircle2, AlertTriangle, Eye, EyeOff, Plus, Trash2, Layers, Server, Sparkles } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 import { AppProfile } from '../types';
 
@@ -17,6 +17,11 @@ const SettingsView: React.FC<SettingsViewProps> = ({ apps, onAddApp, onDeleteApp
   const [geminiSaved, setGeminiSaved] = useState(false);
   const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
 
+  // OpenRouter State
+  const [openRouterKey, setOpenRouterKey] = useState('');
+  const [showOpenRouterKey, setShowOpenRouterKey] = useState(false);
+  const [openRouterSaved, setOpenRouterSaved] = useState(false);
+
   // Custom API State
   const [apiUrl, setApiUrl] = useState('');
   const [apiSaved, setApiSaved] = useState(false);
@@ -32,6 +37,9 @@ const SettingsView: React.FC<SettingsViewProps> = ({ apps, onAddApp, onDeleteApp
 
     const storedApiUrl = localStorage.getItem('custom_api_url');
     if (storedApiUrl) setApiUrl(storedApiUrl);
+
+    const storedOpenRouterKey = localStorage.getItem('openrouter_api_key');
+    if (storedOpenRouterKey) setOpenRouterKey(storedOpenRouterKey);
   }, []);
 
   // --- GEMINI HANDLERS ---
@@ -59,6 +67,18 @@ const SettingsView: React.FC<SettingsViewProps> = ({ apps, onAddApp, onDeleteApp
     } catch (error) {
       console.error(error);
       setTestStatus('error');
+    }
+  };
+
+  // --- OPENROUTER HANDLERS ---
+  const handleSaveOpenRouterKey = () => {
+    if (openRouterKey.trim()) {
+      localStorage.setItem('openrouter_api_key', openRouterKey.trim());
+      setOpenRouterSaved(true);
+      setTimeout(() => setOpenRouterSaved(false), 3000);
+    } else {
+      localStorage.removeItem('openrouter_api_key');
+      setOpenRouterSaved(true);
     }
   };
 
@@ -104,14 +124,14 @@ const SettingsView: React.FC<SettingsViewProps> = ({ apps, onAddApp, onDeleteApp
              <Key className="w-6 h-6 text-purple-400" />
           </div>
           <div>
-            <h2 className="text-xl font-bold text-white">Gemini API Ayarları</h2>
-            <p className="text-sm text-slate-400">İçerik üretimi için gereklidir.</p>
+            <h2 className="text-xl font-bold text-white">Gemini API Ayarları (Google)</h2>
+            <p className="text-sm text-slate-400">Gemini 3 Pro Görsel, Veo Video ve Auto-Tagging için gereklidir.</p>
           </div>
         </div>
 
         <div className="p-8 space-y-6">
           <div>
-             <label className="block text-sm font-medium text-slate-300 mb-2">API Anahtarı</label>
+             <label className="block text-sm font-medium text-slate-300 mb-2">Google API Anahtarı</label>
              <div className="relative">
                 <input 
                    type={showKey ? "text" : "password"}
@@ -137,7 +157,43 @@ const SettingsView: React.FC<SettingsViewProps> = ({ apps, onAddApp, onDeleteApp
         </div>
       </div>
 
-      {/* 2. Custom Server Configuration */}
+      {/* 2. OpenRouter Configuration */}
+      <div className="bg-slate-800 rounded-2xl border border-slate-700 shadow-xl overflow-hidden">
+        <div className="p-6 border-b border-slate-700 bg-slate-900/50 flex items-center gap-3">
+          <div className="bg-emerald-500/10 p-2 rounded-lg">
+             <Sparkles className="w-6 h-6 text-emerald-400" />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold text-white">OpenRouter API (Opsiyonel)</h2>
+            <p className="text-sm text-slate-400">Flux ve Ücretsiz Modelleri kullanmak için gereklidir.</p>
+          </div>
+        </div>
+
+        <div className="p-8 space-y-6">
+          <div>
+             <label className="block text-sm font-medium text-slate-300 mb-2">OpenRouter API Anahtarı</label>
+             <div className="relative">
+                <input 
+                   type={showOpenRouterKey ? "text" : "password"}
+                   value={openRouterKey}
+                   onChange={(e) => setOpenRouterKey(e.target.value)}
+                   placeholder="sk-or-v1-..."
+                   className="w-full bg-slate-900 border border-slate-700 rounded-xl py-3 pl-4 pr-12 text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500 transition-all font-mono"
+                />
+                <button onClick={() => setShowOpenRouterKey(!showOpenRouterKey)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white transition-colors p-1">
+                   {showOpenRouterKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+             </div>
+          </div>
+          <div className="flex justify-end pt-4 border-t border-slate-700">
+             <button onClick={handleSaveOpenRouterKey} className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-medium shadow-lg shadow-emerald-900/30 flex items-center gap-2 transition-all">
+                {openRouterSaved ? <CheckCircle2 className="w-4 h-4" /> : <Save className="w-4 h-4" />} Kaydet
+             </button>
+          </div>
+        </div>
+      </div>
+
+      {/* 3. Custom Server Configuration */}
       <div className="bg-slate-800 rounded-2xl border border-slate-700 shadow-xl overflow-hidden border-l-4 border-l-blue-500">
         <div className="p-6 border-b border-slate-700 bg-slate-900/50 flex items-center gap-3">
           <div className="bg-blue-500/10 p-2 rounded-lg">
@@ -172,7 +228,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ apps, onAddApp, onDeleteApp
         </div>
       </div>
 
-      {/* 3. App Management */}
+      {/* 4. App Management */}
       <div className="bg-slate-800 rounded-2xl border border-slate-700 shadow-xl overflow-hidden">
         <div className="p-6 border-b border-slate-700 bg-slate-900/50 flex items-center gap-3">
           <div className="bg-blue-500/10 p-2 rounded-lg">

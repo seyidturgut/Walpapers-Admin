@@ -172,6 +172,119 @@ export const generateWallpaper = async (prompt: string): Promise<string> => {
 };
 
 /**
+ * Generates a wallpaper using Flux (via Pollinations) with Gemini as Prompt Engineer.
+ */
+export const generateFluxWallpaper = async (userRawInput: string): Promise<string> => {
+  const ai = getAiClient();
+  
+  try {
+    // 1. Rewrite Prompt using Gemini
+    const promptResponse = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: `Rewrite this raw input into a highly detailed, English text-to-image prompt suitable for Stable Diffusion/Flux models. Input: "${userRawInput}".`,
+      config: {
+        systemInstruction: "You are an expert Prompt Engineer for Flux.1. Your goal is to take user input (which might be in Turkish or simple English) and output a single, highly descriptive, artistic, English prompt. Include lighting, style, and mood keywords. Return ONLY the raw prompt text.",
+      }
+    });
+
+    const enhancedPrompt = promptResponse.text;
+    if (!enhancedPrompt) throw new Error("Failed to enhance prompt.");
+
+    console.log("Flux Enhanced Prompt:", enhancedPrompt);
+
+    // 2. Call Pollinations API
+    const encodedPrompt = encodeURIComponent(enhancedPrompt);
+    const pollinationsUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=720&height=1280&model=flux&nologo=true&seed=${Math.floor(Math.random() * 10000)}`;
+
+    const imageResponse = await fetch(pollinationsUrl);
+    if (!imageResponse.ok) throw new Error("Pollinations API request failed.");
+
+    const imageBlob = await imageResponse.blob();
+
+    // 3. Convert to Base64
+    return await blobToBase64(imageBlob);
+
+  } catch (error) {
+    console.error("Error generating Flux wallpaper:", error);
+    throw error;
+  }
+};
+
+
+/**
+ * NEW: Generates Image using Grok (x-ai/grok-4.1-fast:free via OpenRouter) for Prompting + Pollinations (Flux) for Image.
+ */
+export const generateImageWithGrok = async (userRawInput: string): Promise<string> => {
+  const openRouterApiKey = localStorage.getItem('openrouter_api_key');
+  
+  if (!openRouterApiKey) {
+    throw new Error("OpenRouter API Key eksik. Lütfen ayarlardan ekleyin.");
+  }
+
+  try {
+    // Step 1: Prompt Enhancement via Grok
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${openRouterApiKey}`,
+        "HTTP-Referer": window.location.origin,
+        "X-Title": "Purrfect Admin"
+      },
+      body: JSON.stringify({
+        model: "x-ai/grok-4.1-fast:free",
+        messages: [
+          {
+            role: "system",
+            content: "You are an expert AI art prompter. Take the user's input (which may be in Turkish or simple terms) and expand it into a detailed, high-quality, English text-to-image prompt suitable for FLUX or Stable Diffusion. Focus on visual details, lighting, and style. Output ONLY the raw prompt text, no introductions or explanations."
+          },
+          {
+            role: "user",
+            content: userRawInput
+          }
+        ]
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("Grok/OpenRouter API Error Details:", errorText);
+      throw new Error(`Grok Error: ${response.status} - ${errorText}`);
+    }
+
+    const data = await response.json();
+    const enhancedPrompt = data.choices?.[0]?.message?.content;
+
+    if (!enhancedPrompt) {
+      throw new Error("Failed to generate prompt from Grok. Response was empty.");
+    }
+    
+    console.log("Grok Enhanced Prompt:", enhancedPrompt);
+
+    // Step 2: Image Generation via Pollinations (Mobile Ratio 9:16)
+    // 720x1280 used for mobile wallpaper
+    const encodedPrompt = encodeURIComponent(enhancedPrompt);
+    const randomSeed = Math.floor(Math.random() * 1000000);
+    const pollinationsUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=720&height=1280&model=flux&seed=${randomSeed}&nologo=true`;
+
+    const imageResponse = await fetch(pollinationsUrl);
+    if (!imageResponse.ok) {
+      throw new Error("Pollinations Generation Failed");
+    }
+
+    const imageBlob = await imageResponse.blob();
+    
+    // Step 3: Convert to Base64
+    return await blobToBase64(imageBlob);
+
+  } catch (error) {
+    console.error("generateImageWithGrok error:", error);
+    throw error;
+  }
+};
+
+
+/**
  * Generates a short MP4 video wallpaper using Veo.
  */
 export const generateVideoWallpaper = async (prompt: string): Promise<string> => {
@@ -223,7 +336,7 @@ export const generateVideoWallpaper = async (prompt: string): Promise<string> =>
 };
 
 // Helper to convert Blob to Base64
-const blobToBase64 = (blob: Blob): Promise<string> => {
+export const blobToBase64 = (blob: Blob): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onloadend = () => resolve(reader.result as string);

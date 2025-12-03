@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
-import { Wand2, Loader2, Save, RefreshCw, Sparkles, TextCursorInput, Film, Image as ImageIcon, Download, Zap } from 'lucide-react';
-import { generateWallpaper, generateMediaMetadata, generateVideoWallpaper, generateCreativePrompt } from '../services/geminiService';
+import { Wand2, Loader2, Save, RefreshCw, Sparkles, TextCursorInput, Film, Image as ImageIcon, Download, Zap, Cpu, Palette } from 'lucide-react';
+import { generateWallpaper, generateFluxWallpaper, generateMediaMetadata, generateVideoWallpaper, generateCreativePrompt, generateImageWithGrok } from '../services/geminiService';
 import { MediaType, MediaItem, AiMetadataResponse, AppProfile } from '../types';
 
 interface AiGeneratorProps {
@@ -11,6 +11,7 @@ interface AiGeneratorProps {
 
 const AiGenerator: React.FC<AiGeneratorProps> = ({ onSave, activeApp }) => {
   const [activeTab, setActiveTab] = useState<'image' | 'video'>('image');
+  const [imageModel, setImageModel] = useState<'gemini' | 'flux' | 'grok'>('gemini'); 
   const [prompt, setPrompt] = useState('');
   
   const [generatedMediaUrl, setGeneratedMediaUrl] = useState<string | null>(null);
@@ -61,14 +62,33 @@ const AiGenerator: React.FC<AiGeneratorProps> = ({ onSave, activeApp }) => {
     try {
       // 1. Generate Media
       if (activeTab === 'image') {
-        setLoadingPhase("Görsel üretiliyor (Gemini 3 Pro)...");
-        const base64Image = await generateWallpaper(prompt);
-        setGeneratedMediaUrl(base64Image);
-        
-        // 2. Metadata with App Context
-        setLoadingPhase("İçerik analiz ediliyor...");
-        const generatedMeta = await generateMediaMetadata(base64Image, 'image/png', activeApp);
-        setMetadata(generatedMeta);
+        if (imageModel === 'gemini') {
+            setLoadingPhase("Görsel üretiliyor (Gemini 3 Pro)...");
+            const base64Image = await generateWallpaper(prompt);
+            setGeneratedMediaUrl(base64Image);
+            
+            setLoadingPhase("İçerik analiz ediliyor...");
+            const generatedMeta = await generateMediaMetadata(base64Image, 'image/png', activeApp);
+            setMetadata(generatedMeta);
+        } else if (imageModel === 'flux') {
+            // FLUX MODEL (Gemini Native)
+            setLoadingPhase("Prompt Gemini ile iyileştiriliyor ve Flux ile üretiliyor...");
+            const base64Image = await generateFluxWallpaper(prompt);
+            setGeneratedMediaUrl(base64Image);
+
+            setLoadingPhase("İçerik analiz ediliyor...");
+            const generatedMeta = await generateMediaMetadata(base64Image, 'image/png', activeApp);
+            setMetadata(generatedMeta);
+        } else if (imageModel === 'grok') {
+            // GROK MODEL
+            setLoadingPhase("Grok (xAI) promptu mükemmelleştiriyor ve Flux üretiyor...");
+            const base64Image = await generateImageWithGrok(prompt);
+            setGeneratedMediaUrl(base64Image);
+
+            setLoadingPhase("İçerik analiz ediliyor...");
+            const generatedMeta = await generateMediaMetadata(base64Image, 'image/png', activeApp);
+            setMetadata(generatedMeta);
+        }
 
       } else {
         setLoadingPhase("Video render alınıyor (Veo 3.1)... Bu işlem 1-2 dakika sürebilir.");
@@ -82,7 +102,7 @@ const AiGenerator: React.FC<AiGeneratorProps> = ({ onSave, activeApp }) => {
 
     } catch (error) {
       console.error(error);
-      alert("İşlem sırasında bir hata oluştu. Lütfen tekrar deneyin. (Video üretimi API kotasına takılmış olabilir).");
+      alert("İşlem sırasında bir hata oluştu. Lütfen tekrar deneyin.\n\nHata Detayı: " + (error as any).message);
     } finally {
       setLoading(false);
       setLoadingPhase('');
@@ -147,8 +167,8 @@ const AiGenerator: React.FC<AiGeneratorProps> = ({ onSave, activeApp }) => {
                     </p>
                 </div>
 
-                {/* Tabs */}
-                <div className="flex bg-slate-900 p-1 rounded-xl mb-6 border border-slate-700">
+                {/* Main Type Tabs */}
+                <div className="flex bg-slate-900 p-1 rounded-xl mb-4 border border-slate-700">
                     <button 
                         onClick={() => { setActiveTab('image'); setGeneratedMediaUrl(null); }}
                         className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-all ${activeTab === 'image' ? 'bg-purple-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
@@ -163,10 +183,37 @@ const AiGenerator: React.FC<AiGeneratorProps> = ({ onSave, activeApp }) => {
                     </button>
                 </div>
 
+                {/* Sub Model Selector (Only for Image) */}
+                {activeTab === 'image' && (
+                    <div className="grid grid-cols-3 gap-2 mb-6">
+                        <button 
+                            onClick={() => setImageModel('gemini')}
+                            className={`flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold border transition-all ${imageModel === 'gemini' ? 'bg-purple-500/20 border-purple-500 text-purple-300' : 'bg-slate-800 border-slate-700 text-slate-500 hover:bg-slate-700'}`}
+                        >
+                            <Cpu className="w-3.5 h-3.5" /> Gemini 3
+                        </button>
+                        <button 
+                            onClick={() => setImageModel('flux')}
+                            className={`flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold border transition-all ${imageModel === 'flux' ? 'bg-pink-500/20 border-pink-500 text-pink-300' : 'bg-slate-800 border-slate-700 text-slate-500 hover:bg-slate-700'}`}
+                        >
+                            <Palette className="w-3.5 h-3.5" /> Flux.1
+                        </button>
+                        <button 
+                            onClick={() => setImageModel('grok')}
+                            className={`flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold border transition-all ${imageModel === 'grok' ? 'bg-amber-500/20 border-amber-500 text-amber-300' : 'bg-slate-800 border-slate-700 text-slate-500 hover:bg-slate-700'}`}
+                        >
+                            <Zap className="w-3.5 h-3.5" /> Grok (xAI)
+                        </button>
+                    </div>
+                )}
+
                 <div className="space-y-4 flex-1">
                     <div className="flex justify-between items-center">
                         <label className="block text-sm font-medium text-slate-300">
-                            {activeTab === 'image' ? 'Görsel Tarifi' : 'Video Senaryosu'}
+                             {activeTab === 'image' ? 'Görsel Tarifi' : 'Video Senaryosu'}
+                             <span className="text-xs text-slate-500 ml-2 font-normal">
+                                (Türkçe yazabilirsiniz, AI çevirir)
+                             </span>
                         </label>
                         <button 
                             onClick={handleAutoPrompt}
@@ -181,7 +228,7 @@ const AiGenerator: React.FC<AiGeneratorProps> = ({ onSave, activeApp }) => {
                     <textarea 
                         value={prompt}
                         onChange={(e) => setPrompt(e.target.value)}
-                        placeholder={`${activeApp.name} için bir şeyler yazın... (Context: ${activeApp.aiContext})`}
+                        placeholder={`${activeApp.name} için bir şeyler yazın...`}
                         className={`w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none h-32 resize-none transition-colors ${activeTab === 'image' ? 'focus:border-purple-500' : 'focus:border-blue-500'}`}
                     />
                     
@@ -230,7 +277,12 @@ const AiGenerator: React.FC<AiGeneratorProps> = ({ onSave, activeApp }) => {
                     {loading ? (
                         <><Loader2 className="w-5 h-5 animate-spin" /> Bekleyiniz...</>
                     ) : (
-                        <><Wand2 className="w-5 h-5" /> {activeTab === 'image' ? 'Görsel Oluştur' : 'Video Oluştur'}</>
+                        <><Wand2 className="w-5 h-5" /> 
+                          {activeTab === 'image' 
+                            ? (imageModel === 'gemini' ? 'Gemini ile Üret' : imageModel === 'flux' ? 'Flux ile Üret' : 'Grok ile Üret') 
+                            : 'Video Oluştur'
+                          }
+                        </>
                     )}
                 </button>
             </div>
